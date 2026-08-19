@@ -87,13 +87,21 @@ a seeded binary noise pattern refreshed per frame — it drives the network with
 retinotopic information itself.
 
 **Invariants**
-- `apertures.dtype == bool`; no frame is entirely empty except designated blanks.
-- Bar aperture area is constant across frames within a direction (±1 px for rasterisation).
+- `apertures.dtype == bool`; no frame is entirely empty.
+- Every lit pixel lies inside the circular field mask.
+- Each generator's declared `n_frames` equals the frames it actually produces.
 - `render` output is finite and matches torchvision ImageNet normalisation.
 - Same `carrier_seed` ⇒ bit-identical carrier.
 
-**Acceptance:** property test asserting area conservation across all frames and directions;
-determinism test on repeated generation.
+**Corrected during implementation.** An earlier draft of this spec required bar aperture area to
+be constant across frames. Measurement showed it is not, and should not be: the circular field
+mask clips the bar as it approaches the edge, so area rises and falls across a sweep
+(86 → 512 → 86 px at resolution 64). This matches human retinotopy, where the stimulus is
+circularly masked for the same reason. The invariant was wrong; the behaviour is correct.
+Coverage per frame is exposed as `ApertureSequence.coverage` so the fit can account for it.
+
+**Acceptance:** determinism test on repeated generation; field-containment test; declared-vs-actual
+frame count test for every generator.
 
 ---
 

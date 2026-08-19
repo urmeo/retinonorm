@@ -62,13 +62,15 @@ class StimulusConfig(ConfigBase):
     n_steps: int = 32
     bar_width_frac: float = 0.125
     directions: Tuple[int, ...] = (0, 45, 90, 135, 180, 225, 270, 315)
+    wedge_span_deg: float = 45.0
+    ring_thickness_frac: float = 0.125
     carrier_seed: int = 0
 
     def __post_init__(self) -> None:
         if self.resolution < 8:
             raise ConfigError("resolution must be at least 8 pixels")
         if self.resolution % 2:
-            raise ConfigError("resolution must be even so the field has a true centre")
+            raise ConfigError("resolution must be even to keep the field symmetric about the origin")
         if self.n_steps < 2:
             raise ConfigError("n_steps must be at least 2")
         if not 0.0 < self.bar_width_frac < 1.0:
@@ -77,14 +79,23 @@ class StimulusConfig(ConfigBase):
             raise ConfigError("at least one sweep direction is required")
         if any(not 0 <= d < 360 for d in self.directions):
             raise ConfigError("directions must be degrees in [0, 360)")
+        if not 0.0 < self.wedge_span_deg <= 360.0:
+            raise ConfigError("wedge_span_deg must lie in (0, 360]")
+        if not 0.0 < self.ring_thickness_frac < 1.0:
+            raise ConfigError("ring_thickness_frac must lie in (0, 1)")
 
     @property
-    def n_frames(self) -> int:
+    def n_bar_frames(self) -> int:
+        """Frame count for a bar run only. Wedge and ring runs are ``n_steps`` frames."""
         return self.n_steps * len(self.directions)
 
     @property
     def bar_width_px(self) -> float:
         return self.bar_width_frac * self.resolution
+
+    @property
+    def ring_thickness_px(self) -> float:
+        return self.ring_thickness_frac * self.resolution
 
 
 @dataclass(frozen=True)
