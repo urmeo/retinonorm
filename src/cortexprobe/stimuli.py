@@ -13,11 +13,47 @@ from typing import List, Tuple
 
 import numpy as np
 
-from .config import StimulusConfig
+from .config import ConfigError, StimulusConfig
 from .geometry import Grid
 
 BoolArray = np.ndarray
 FloatArray = np.ndarray
+
+
+def frame_similarity(stack: BoolArray) -> FloatArray:
+    """Pairwise cosine similarity between aperture frames.
+
+    Cosine rather than raw overlap, so a large frame and a small one are not judged similar
+    merely because the large one covers the small one's pixels along with many others.
+    """
+    flat = stack.reshape(len(stack), -1).astype(np.float64)
+    norms = np.linalg.norm(flat, axis=1)
+    norms[norms == 0.0] = 1.0
+    unit = flat / norms[:, None]
+    return unit @ unit.T
+
+
+def _prune_leaking_frames(stack: BoolArray, groups: np.ndarray, threshold: float) -> np.ndarray:
+    """Frame indices to keep so no cross-group pair overlaps above ``threshold``.
+
+    Group labels come from index arithmetic -- a wedge start angle, a ring block -- which knows
+    nothing about how much neighbouring apertures actually share. Frames adjacent to a group
+    boundary can therefore overlap a training frame almost completely. Rather than trust the
+    arithmetic, the offending frames are measured and dropped.
+
+    Frames are removed one at a time, always the one in the most surviving violations, until
+    none remain. Dropping frames costs a little data; leaving them makes every held-out score
+    on this design an overestimate of unknown size.
+    """
+    similarity = frame_similarity(stack)
+    violating = (similarity > threshold) & (groups[:, None] != groups[None, :])
+    keep = np.ones(len(stack), dtype=bool)
+    while True:
+        live = violating & keep[:, None] & keep[None, :]
+        counts = live.sum(axis=1)
+        if not counts.any():
+            return np.flatnonzero(keep)
+        keep[int(np.argmax(counts))] = False
 
 
 @dataclass(frozen=True)
@@ -65,18 +101,31 @@ class ApertureGenerator(ABC):
     def build(self) -> ApertureSequence:
         frames, labels, groups = self._frames()
         stack = np.stack(frames) & self.grid.field_mask
+        group_array = np.asarray(groups)
+
+        keep = _prune_leaking_frames(stack, group_array, self.config.max_fold_similarity)
+        if len(np.unique(group_array[keep])) < 2:
+            raise ConfigError(
+                f"{self.kind} apertures leave fewer than two cross-validation groups once frames "
+                f"overlapping above max_fold_similarity={self.config.max_fold_similarity} are "
+                "dropped; widen n_steps or raise the threshold"
+            )
         return ApertureSequence(
-            apertures=stack,
+            apertures=stack[keep],
             grid=self.grid,
             kind=self.kind,
-            frame_index=np.asarray(labels),
-            group=np.asarray(groups),
+            frame_index=np.asarray(labels)[keep],
+            group=group_array[keep],
         )
 
     @property
     @abstractmethod
     def n_frames(self) -> int:
-        """Frame count this generator will produce."""
+        """Frames this design lays out, before leakage pruning removes any.
+
+        :meth:`build` may return fewer: see :func:`_prune_leaking_frames`. Read
+        :attr:`ApertureSequence.n_frames` for the count actually presented.
+        """
 
     @abstractmethod
     def _frames(self) -> Tuple[List[BoolArray], List[int], List[int]]:
