@@ -272,6 +272,49 @@ def test_a_single_lobed_unit_is_not_flagged(fitter, grid, apertures) -> None:
         assert fit.second_field_r2 < 0.1
 
 
+@pytest.mark.slow
+def test_misspecification_separates_single_from_two_lobed_units(fitter, grid, apertures) -> None:
+    """Pins the range the docstring, the ADR and the README all quote.
+
+    The separation is not uniform: it narrows as noise grows, and the weakest two-lobe case sits
+    only about four times above pure noise. Asserting the whole range keeps that honest, so a
+    change that quietly erodes the margin fails here rather than in a downstream analysis.
+    """
+    from cortexprobe.prf.model import predict
+
+    geometries = [
+        GaussianReceptiveField(14.0, 0.0, 3.0).weights(grid)
+        + GaussianReceptiveField(-14.0, 0.0, 3.0).weights(grid),
+        GaussianReceptiveField(16.0, 10.0, 3.0).weights(grid)
+        + GaussianReceptiveField(-16.0, -10.0, 3.0).weights(grid),
+    ]
+
+    single, two_lobed = [], []
+    for noise in (0.0, 0.2, 0.5, 0.8):
+        single.append(
+            fitter.fit_unit(
+                synthesise(grid, apertures, (12.0, 8.0, 5.0), noise=noise, seed=7)
+            ).second_field_r2
+        )
+        for weights in geometries:
+            clean = 3.0 * predict(weights, apertures) + 0.5
+            response = clean
+            if noise > 0:
+                rng = np.random.default_rng(7)
+                response = clean + rng.normal(0.0, noise * float(clean.std()), size=clean.shape)
+            two_lobed.append(fitter.fit_unit(response).second_field_r2)
+
+    noise_only = fitter.fit_unit(
+        np.random.default_rng(11).normal(size=fitter.n_frames)
+    ).second_field_r2
+
+    assert max(single) < 0.05
+    assert noise_only < 0.1
+    assert min(two_lobed) > 0.2
+    assert max(two_lobed) < 0.5
+    assert min(two_lobed) > max(single) * 5
+
+
 def test_misspecification_does_not_change_acceptance(fitter, grid, apertures) -> None:
     """The diagnostic is reported, not enforced; downstream analysis states its own cut."""
     from cortexprobe.prf.model import predict
