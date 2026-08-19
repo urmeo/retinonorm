@@ -77,7 +77,7 @@ def test_non_finite_response_is_not_fitted(fitter) -> None:
 
 
 def test_wrong_length_response_raises(fitter) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="one value per stimulus frame"):
         fitter.fit_unit(np.zeros(len(fitter.apertures) + 1))
 
 
@@ -100,5 +100,5 @@ def test_fit_is_deterministic(fitter, grid, apertures) -> None:
 
 
 def test_fit_all_rejects_wrong_frame_count(fitter) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="one row per stimulus frame"):
         fitter.fit_all(np.zeros((len(fitter.apertures) + 2, 3)))

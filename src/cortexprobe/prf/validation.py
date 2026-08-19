@@ -65,7 +65,7 @@ class LeaveOneGroupOut:
             raise ValueError("cross-validation needs at least two sweep groups")
 
     def __len__(self) -> int:
-        return int(len(self.unique))
+        return len(self.unique)
 
     def splits(self) -> Iterator[tuple[IntArray, IntArray]]:
         for held_out in self.unique:

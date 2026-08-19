@@ -233,5 +233,7 @@ def build_apertures(config: StimulusConfig, kind: str = "bar") -> ApertureSequen
     try:
         generator = GENERATORS[kind]
     except KeyError:
-        raise ValueError(f"unknown stimulus kind {kind!r}; expected one of {sorted(GENERATORS)}")
+        raise ValueError(
+            f"unknown stimulus kind {kind!r}; expected one of {sorted(GENERATORS)}"
+        ) from None
     return generator(config).build()
