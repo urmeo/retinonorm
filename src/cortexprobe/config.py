@@ -56,6 +56,11 @@ class StimulusConfig(ConfigBase):
 
     A bar aperture sweeps the visual field once per entry in ``directions``, exposing a noise
     carrier that drives the network without itself carrying retinotopic structure.
+
+    ``max_fold_similarity`` is the largest cosine overlap tolerated between a held-out frame
+    and any training frame. Frames that exceed it across a fold boundary are dropped when the
+    sequence is built, so a cross-validation score cannot be inflated by near-duplicate frames
+    straddling the split.
     """
 
     resolution: int = 128
@@ -65,6 +70,7 @@ class StimulusConfig(ConfigBase):
     wedge_span_deg: float = 45.0
     ring_thickness_frac: float = 0.125
     carrier_seed: int = 0
+    max_fold_similarity: float = 0.75
 
     def __post_init__(self) -> None:
         if self.resolution < 8:
@@ -83,6 +89,8 @@ class StimulusConfig(ConfigBase):
             raise ConfigError("wedge_span_deg must lie in (0, 360]")
         if not 0.0 < self.ring_thickness_frac < 1.0:
             raise ConfigError("ring_thickness_frac must lie in (0, 1)")
+        if not 0.0 < self.max_fold_similarity < 1.0:
+            raise ConfigError("max_fold_similarity must lie in (0, 1)")
 
     @property
     def n_bar_frames(self) -> int:
