@@ -126,7 +126,7 @@ parameters that generated them.
 
 Worst and mean are taken over n = 5 ground-truth pRFs. On pure noise the fitter accepted none of 40 units, and its best spurious R² was 0.1947, below the 0.2 acceptance threshold.
 
-<sub>macOS-26.6.1, Python 3.12.13, NumPy 2.5.2, SciPy 1.18.0 | config digest `4d6a856a499e` | generated 2026-08-19</sub>
+<sub>Recorded on macOS-26.6.1 arm64, Python 3.12.13, NumPy 2.5.2, SciPy 1.18.0 | config digest `4d6a856a499e` | generated 2026-08-19</sub>
 <!-- END GENERATED: recovery -->
 
 ### Parameter uncertainty
@@ -156,7 +156,7 @@ Empirical coverage of the nominal 95% interval:
 
 Coverage runs slightly under nominal, and lowest near the field edge at high noise, where the linearisation behind the interval is weakest.
 
-<sub>macOS-26.6.1, Python 3.12.13, NumPy 2.5.2, SciPy 1.18.0 | config digest `4d6a856a499e` | generated 2026-08-19</sub>
+<sub>Recorded on macOS-26.6.1 arm64, Python 3.12.13, NumPy 2.5.2, SciPy 1.18.0 | config digest `4d6a856a499e` | generated 2026-08-19</sub>
 <!-- END GENERATED: uncertainty -->
 
 ### Cross-validation and leakage
@@ -174,7 +174,7 @@ have both, because a bar moving one step barely changes the input.
 
 Mean ± SD over seeds 21–40. The carrier is a width-3 boxcar, whose lag-1 autocorrelation measured 0.651 ± 0.086 against a theoretical 0.667.
 
-<sub>macOS-26.6.1, Python 3.12.13, NumPy 2.5.2, SciPy 1.18.0 | config digest `4d6a856a499e` | generated 2026-08-19</sub>
+<sub>Recorded on macOS-26.6.1 arm64, Python 3.12.13, NumPy 2.5.2, SciPy 1.18.0 | config digest `4d6a856a499e` | generated 2026-08-19</sub>
 <!-- END GENERATED: cross_validation -->
 
 A random frame split raises the apparent score on temporally correlated noise in most
@@ -188,13 +188,13 @@ autocorrelation.
 <!-- BEGIN GENERATED: runtime -->
 | Units | Fit (s) | Per unit (ms) | CV (s) | CV factor |
 |---|---|---|---|---|
-| 1 | 0.009 | 9.2 | 0.044 | 4.8× |
-| 10 | 0.094 | 9.4 | 0.446 | 4.8× |
-| 100 | 0.919 | 9.2 | 4.300 | 4.7× |
+| 1 | 0.008 | 8.2 | 0.036 | 4.4× |
+| 10 | 0.073 | 7.3 | 0.379 | 5.2× |
+| 100 | 0.765 | 7.7 | 3.958 | 5.2× |
 
-Per-unit cost is flat, so nothing quadratic hides in the loop. Cross-validation costs a roughly constant factor: 4 folds plus the full fit. On this machine 10 000 units extrapolate to about 1.5 minutes single-threaded. Timings are hardware-specific; the environment is recorded below.
+Per-unit cost is flat, so nothing quadratic hides in the loop. Cross-validation costs a roughly constant factor: 4 folds plus the full fit. On this machine 10 000 units extrapolate to about 1.3 minutes single-threaded. Timings are hardware-specific; the environment is recorded below.
 
-<sub>macOS-26.6.1, Python 3.12.13, NumPy 2.5.2, SciPy 1.18.0 | config digest `4d6a856a499e` | generated 2026-08-19</sub>
+<sub>Recorded on macOS-26.6.1 arm64, Python 3.12.13, NumPy 2.5.2, SciPy 1.18.0 | config digest `4d6a856a499e` | generated 2026-08-19</sub>
 <!-- END GENERATED: runtime -->
 
 ---
