@@ -2,7 +2,9 @@
 
 **Population receptive fields and lesion effects in convolutional models of the visual hierarchy.**
 
-Status: planning. No code written. No results claimed.
+Status: instrument implemented and validated; no network probed yet. This file is the original
+forward-looking plan, kept for the reasoning behind the design. Where it describes intent and the
+code has since settled the detail, `README.md` and `docs/BUILD_SPEC.md` are authoritative.
 
 ---
 
@@ -86,7 +88,7 @@ be softened.
 
 Design consequences:
 
-- Target **Python 3.12** via Homebrew, in a project-local `.venv`.
+- Support **Python 3.9 and up**. CI runs 3.9 and 3.12, in per-version project-local virtualenvs.
 - Model must be small. Baseline is **AlexNet** (~61M params, 5 conv layers, maps cleanly onto a
   shallow hierarchy) with **ResNet-18** as a second architecture. Both frozen — no training, so
   no GPU-hours and full determinism.
@@ -107,7 +109,7 @@ Design consequences:
                  └──────┬───────┘  → (T, U) activation matrix, streamed to disk
                         │
                  ┌──────▼───────┐
-                 │  prf.fit     │  coarse grid search → nonlinear refine (Levenberg–Marquardt)
+                 │  prf.fit     │  coarse grid search → bounded nonlinear refine (trust-region)
                  └──────┬───────┘  → per-unit (x0, y0, sigma, beta, R²)
                         │
         ┌───────────────┼───────────────┐
@@ -126,7 +128,7 @@ Design consequences:
 
 | Stage | Input | Output | Determinism |
 |---|---|---|---|
-| `stimuli` | `StimulusConfig` | `(T,H,W) uint8`, `stimuli.json` | seeded; hash recorded |
+| `stimuli` | `StimulusConfig` | `(T,H,W) bool`, CV group per frame | deterministic; digest recorded |
 | `model` | model id, layer names | `(T,U) float32` memmap | frozen weights; hash recorded |
 | `prf.fit` | activations, apertures | `PRFResult` table | seeded init; converged flag per unit |
 | `lesion` | lesion spec | refitted `PRFResult` | same seed as intact run |
@@ -143,23 +145,29 @@ and refuses to render if the run manifest hash does not match. No number is ever
 ```
 cortexprobe/
 ├── src/cortexprobe/
+│   ├── arrays.py         dtype-bearing array aliases
 │   ├── config.py         frozen dataclasses; single source of run truth
-│   ├── stimuli.py        aperture generators (bar, wedge, ring), carrier
-│   ├── models.py         registry, frozen loading, layer taps
-│   ├── activations.py    hooked extraction, streaming, spatial pooling
+│   ├── geometry.py       visual field coordinate system
+│   ├── stimuli.py        aperture generators (bar, wedge, ring), fold grouping
+│   ├── models.py         registry, frozen loading, layer taps            (planned)
+│   ├── activations.py    hooked extraction, streaming, spatial pooling   (planned)
 │   ├── prf/
 │   │   ├── model.py      Gaussian pRF → predicted timecourse
 │   │   ├── fit.py        grid search + nonlinear refine
-│   │   └── result.py     PRFResult container, IO, validation
-│   ├── lesion.py         channel / spatial / random lesion operators
-│   ├── individuals.py    seeded instance generation
-│   ├── evaluation.py     H1–H4 statistics
-│   ├── viz.py            retinotopy maps, size-vs-depth, lesion deltas
-│   └── cli.py            subcommands
+│   │   ├── validation.py leave-one-sweep-axis-out cross-validation
+│   │   └── result.py     PRFResult container, IO, validation             (planned)
+│   ├── lesion.py         channel / spatial / random lesion operators     (planned)
+│   ├── individuals.py    seeded instance generation                      (planned)
+│   ├── evaluation.py     H1–H4 statistics                                (planned)
+│   ├── viz.py            retinotopy maps, size-vs-depth, lesion deltas   (planned)
+│   └── cli.py            subcommands                                     (planned)
 ├── tests/                unit + property + integration (synthetic ground truth)
+├── scripts/              validation report and figure generation
+├── benchmarks/           runtime scaling
 ├── configs/              versioned run configs
-├── docs/                 PLAN.md, BUILD_SPEC.md, ADRs, RESULTS.md
-├── results/              gitignored; run outputs
+├── docs/                 PLAN.md, BUILD_SPEC.md, ADRs, figures/
+├── results/              run outputs ignored, except the committed validation record
+│                         (`*.json`, `*.md`) that CI re-checks every README number against
 ├── .github/workflows/    ci.yml (lint, type, test, coverage)
 ├── pyproject.toml
 ├── LICENSE               MIT
@@ -184,7 +192,8 @@ pRF it generated itself, no downstream result is trustworthy.
 | Layer | What it proves |
 |---|---|
 | Unit tests | each function behaves on edge cases |
-| Property tests | aperture area conserved; Gaussian normalised; fit invariant to activation scale |
+| Property tests | Gaussian carries unit volume; every lit pixel lies inside the field mask; no
+held-out frame exceeds `max_fold_similarity` against a training frame |
 | **Ground-truth recovery** | **fitter is correct** — parameters recovered from synthetic pRFs |
 | Integration | CLI end-to-end on a tiny config completes and writes valid artifacts |
 | CI | lint (ruff), types (mypy strict), tests, coverage floor 85% |
@@ -208,6 +217,11 @@ Granular, short messages, one concern each.
 | 8 | Docs | `updated readme`, `add adrs`, `add citation` |
 
 Rule: no commit both adds a feature and changes unrelated formatting.
+
+These are the *planned* commits. The log diverged where the work did: the grid search and
+the nonlinear refine landed as one `add prf fitter`, CI arrived late rather than in the
+scaffold, and the audit remediation added a milestone this table never anticipated. Read
+`git log` for what was actually built.
 
 ---
 
