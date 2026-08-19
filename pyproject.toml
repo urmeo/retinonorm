@@ -34,9 +34,6 @@ dev = [
   "mypy>=1.11,<2",
 ]
 
-[project.scripts]
-cortexprobe = "cortexprobe.cli:main"
-
 [tool.setuptools.packages.find]
 where = ["src"]
 
