@@ -13,7 +13,7 @@ import pytest
 
 from cortexprobe.config import FitConfig
 from cortexprobe.geometry import Grid
-from cortexprobe.prf.fit import BOUND_TOLERANCE, PRFFitter
+from cortexprobe.prf.fit import BOUND_TOLERANCE, PRFFitter, UnitFit
 from cortexprobe.prf.model import GaussianReceptiveField
 
 from .conftest import synthesise
@@ -235,3 +235,55 @@ def test_unit_volume_is_lost_above_the_admissible_range(grid) -> None:
     weights = GaussianReceptiveField(0.0, 0.0, 20.0).weights(grid)
 
     assert weights[grid.field_mask].sum() < MIN_ON_GRID_VOLUME
+
+
+# --- misspecification: one Gaussian standing in for two ------------------------------------
+
+
+def test_a_two_lobed_unit_is_flagged_as_misspecified(fitter, grid, apertures) -> None:
+    """One lobe wins the fit, the sigma belongs to neither, and R2 alone looks respectable."""
+    lobes = GaussianReceptiveField(14.0, 0.0, 3.0).weights(grid) + GaussianReceptiveField(
+        -14.0, 0.0, 3.0
+    ).weights(grid)
+    from cortexprobe.prf.model import predict
+
+    response = 3.0 * predict(lobes, apertures) + 0.5
+
+    fit = fitter.fit_unit(response)
+
+    assert fit.accepted
+    assert fit.r2 > fitter.config.r2_threshold
+    assert fit.second_field_r2 > 0.2
+
+
+def test_a_single_lobed_unit_is_not_flagged(fitter, grid, apertures) -> None:
+    for noise, seed in ((0.0, 0), (0.2, 7), (0.5, 7), (0.8, 7)):
+        fit = fitter.fit_unit(synthesise(grid, apertures, (12.0, 8.0, 5.0), noise=noise, seed=seed))
+
+        assert fit.second_field_r2 < 0.1
+
+
+def test_misspecification_does_not_change_acceptance(fitter, grid, apertures) -> None:
+    """The diagnostic is reported, not enforced; downstream analysis states its own cut."""
+    from cortexprobe.prf.model import predict
+
+    lobes = GaussianReceptiveField(14.0, 0.0, 3.0).weights(grid) + GaussianReceptiveField(
+        -14.0, 0.0, 3.0
+    ).weights(grid)
+
+    fit = fitter.fit_unit(3.0 * predict(lobes, apertures) + 0.5)
+
+    assert fit.second_field_r2 > 0.2
+    assert fit.accepted
+
+
+def test_a_perfect_fit_leaves_no_residual_structure(fitter, grid, apertures) -> None:
+    """A residual of size 1e-16 must not read as a second lobe."""
+    fit = fitter.fit_unit(synthesise(grid, apertures, (12.0, 8.0, 5.0)))
+
+    assert fit.r2 > 0.999
+    assert fit.second_field_r2 < 0.01
+
+
+def test_unfittable_response_reports_no_second_field(fitter) -> None:
+    assert np.isnan(UnitFit.failed().second_field_r2)

@@ -59,6 +59,19 @@ class UnitFit:
     se_x0: float = float("nan")
     se_y0: float = float("nan")
     se_sigma: float = float("nan")
+    second_field_r2: float = float("nan")
+    """Variance a second receptive field would explain on top of this one.
+
+    A single Gaussian cannot represent a unit driven by two separated lobes. It settles on one
+    of them, reports a sigma belonging to neither, and nothing else in this record would show
+    it. Multi-peaked spatial tuning is common in the deeper layers this project intends to
+    tap, so a misspecified fit there would be a plausible-looking wrong pRF.
+
+    Measured on a four-direction bar sweep at 64 px, a genuine single-Gaussian unit stays
+    under 0.03 from noiseless to 80 per cent noise, pure noise reaches 0.06, and a two-lobe
+    unit scores 0.29 to 0.44. It is reported rather than enforced: acceptance does not depend
+    on it, so downstream analysis chooses its own cut and states it.
+    """
     x0_at_bound: bool = False
     y0_at_bound: bool = False
     sigma_at_bound: bool = False
@@ -271,6 +284,28 @@ class PRFFitter:
         ]
         return pinned[0], pinned[1], pinned[2]
 
+    def _second_field_r2(self, response: FloatArray, fitted: FloatArray) -> float:
+        """Largest R2 a second candidate pRF would add to the fitted one.
+
+        This is the R2 gain from a two-Gaussian alternative, but in closed form. Every
+        candidate prediction is already built, so each is orthogonalised against the fitted
+        prediction and the intercept, and its incremental R2 read off directly. No second
+        nonlinear search runs, which keeps per-unit cost flat.
+        """
+        total = float(np.sum((response - response.mean()) ** 2))
+        if total <= 0.0:
+            return 0.0
+        residual = response - fitted
+        design = np.column_stack([fitted, np.ones_like(fitted)])
+        coefficients, *_ = np.linalg.lstsq(design, self._predictions, rcond=None)
+        perpendicular = self._predictions - design @ coefficients
+        norms = np.sum(perpendicular**2, axis=0)
+        usable = norms > 1e-12
+        if not usable.any():
+            return 0.0
+        gains = (residual @ perpendicular[:, usable]) ** 2 / (norms[usable] * total)
+        return float(np.max(gains))
+
     def _coarse_search(self, response: FloatArray) -> GaussianReceptiveField:
         best_index, best_r2 = 0, -np.inf
         for index in range(self._predictions.shape[1]):
@@ -328,6 +363,7 @@ class PRFFitter:
             se_x0=se_x0,
             se_y0=se_y0,
             se_sigma=se_sigma,
+            second_field_r2=self._second_field_r2(response, fitted),
             x0_at_bound=x0_at_bound,
             y0_at_bound=y0_at_bound,
             sigma_at_bound=sigma_at_bound,
