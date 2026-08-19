@@ -127,7 +127,7 @@ class FitConfig(ConfigBase):
     """
 
     grid_size: int = 12
-    sigma_bounds: Tuple[float, float] = (0.5, 40.0)
+    sigma_bounds: Tuple[float, float] = (1.0, 40.0)
     max_nfev: int = 200
     r2_threshold: float = 0.2
 
@@ -135,8 +135,11 @@ class FitConfig(ConfigBase):
         if self.grid_size < 3:
             raise ConfigError("grid_size must be at least 3")
         low, high = self.sigma_bounds
-        if low <= 0:
-            raise ConfigError("lower sigma bound must be positive")
+        if low < 1.0:
+            raise ConfigError(
+                "lower sigma bound must be at least 1 pixel; below the pixel pitch a Gaussian "
+                "is under-sampled and loses its unit-volume normalisation"
+            )
         if high <= low:
             raise ConfigError("sigma_bounds must be increasing")
         if self.max_nfev < 1:
