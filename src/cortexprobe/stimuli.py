@@ -88,7 +88,17 @@ class ApertureGenerator(ABC):
 
 
 class BarSweep(ApertureGenerator):
-    """A bar traverses the field once per direction, perpendicular to its heading."""
+    """A bar traverses the field once per direction, perpendicular to its heading.
+
+    Frames are grouped by sweep *axis* (``direction % 180``), not by direction. The bar
+    position depends on ``x cos(theta) + y sin(theta)``, which negates under a 180 degree
+    turn, while the sweep offsets run symmetrically from ``-radius`` to ``+radius``. Frame
+    ``(d, k)`` is therefore bit-identical to frame ``(d + 180, n_steps - 1 - k)``. Without an
+    haemodynamic response there is no temporal asymmetry to break the tie, so a return sweep
+    carries no information its outbound partner does not. Grouping by direction would place
+    those identical frames on opposite sides of a cross-validation boundary and score
+    memorisation as generalisation.
+    """
 
     kind = "bar"
 
@@ -110,7 +120,7 @@ class BarSweep(ApertureGenerator):
             for step, offset in enumerate(travel):
                 frames.append(np.abs(projection - offset) <= half_width)
                 labels.append(direction * 1000 + step)
-                groups.append(direction)
+                groups.append(direction % 180)
         return frames, labels, groups
 
 
