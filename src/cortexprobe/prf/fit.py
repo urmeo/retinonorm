@@ -1,4 +1,4 @@
-"""Two-stage pRF fitting.
+"""Two-stage pRF fitting with parameter uncertainty.
 
 A coarse grid picks the basin, then nonlinear refinement finds the minimum inside it. Grid
 search alone resolves position no better than its own spacing; refinement alone settles into
@@ -16,6 +16,7 @@ from typing import List, Sequence, Tuple
 
 import numpy as np
 from scipy.optimize import least_squares
+from scipy.stats import t as student_t
 
 from ..config import FitConfig
 from ..geometry import Grid
@@ -23,10 +24,16 @@ from .model import GaussianReceptiveField, predict
 
 FloatArray = np.ndarray
 
+# Three nonlinear parameters plus amplitude and baseline solved by projection.
+N_PARAMETERS = 5
+
+# A fitted value this close to its search bound is reported as pinned rather than estimated.
+BOUND_TOLERANCE = 1e-3
+
 
 @dataclass(frozen=True)
 class UnitFit:
-    """The fitted pRF for one unit."""
+    """The fitted pRF for one unit, with the uncertainty of its parameters."""
 
     x0: float
     y0: float
@@ -36,6 +43,11 @@ class UnitFit:
     r2: float
     converged: bool
     n_fev: int
+    se_x0: float = float("nan")
+    se_y0: float = float("nan")
+    se_sigma: float = float("nan")
+    at_bound: bool = False
+    dof: int = 0
 
     @classmethod
     def failed(cls) -> UnitFit:
@@ -46,6 +58,22 @@ class UnitFit:
     @property
     def eccentricity(self) -> float:
         return float(np.hypot(self.x0, self.y0))
+
+    def confidence_interval(self, parameter: str, level: float = 0.95) -> Tuple[float, float]:
+        """Two-sided interval for one parameter from the linearised covariance.
+
+        The interval assumes the residuals are approximately Gaussian and the model is locally
+        linear at the solution. It is a summary of fit precision, not a guarantee of coverage
+        under model misspecification.
+        """
+        if not 0.0 < level < 1.0:
+            raise ValueError("level must lie in (0, 1)")
+        estimate = getattr(self, parameter)
+        error = getattr(self, f"se_{parameter}")
+        if not np.isfinite(estimate) or not np.isfinite(error) or self.dof <= 0:
+            return float("nan"), float("nan")
+        critical = float(student_t.ppf(0.5 + level / 2.0, self.dof))
+        return estimate - critical * error, estimate + critical * error
 
 
 def _solve_amplitude(prediction: FloatArray, response: FloatArray) -> Tuple[FloatArray, FloatArray]:
@@ -63,6 +91,25 @@ def _r_squared(response: FloatArray, fitted: FloatArray) -> float:
     return 1.0 - residual / total
 
 
+def _standard_errors(jacobian: FloatArray, cost: float, n_frames: int) -> Tuple[float, float, float]:
+    """Linearised standard errors from the Jacobian at the solution.
+
+    ``cov = residual_variance * (J^T J)^-1`` is the usual Gauss-Newton approximation. The
+    pseudo-inverse is used because a pRF sitting outside the stimulated field can make
+    ``J^T J`` singular, and that case should yield undefined errors rather than an exception.
+    """
+    dof = n_frames - N_PARAMETERS
+    if dof <= 0:
+        return (float("nan"),) * 3
+    residual_variance = 2.0 * cost / dof
+    covariance = residual_variance * np.linalg.pinv(jacobian.T @ jacobian)
+    variances = np.diag(covariance)
+    if not np.all(np.isfinite(variances)) or np.any(variances < 0.0):
+        return (float("nan"),) * 3
+    errors = np.sqrt(variances)
+    return float(errors[0]), float(errors[1]), float(errors[2])
+
+
 class PRFFitter:
     """Fits Gaussian pRFs to activation timecourses recorded under a known aperture sequence.
 
@@ -76,6 +123,10 @@ class PRFFitter:
             raise ValueError("apertures must have shape (frames, height, width)")
         if apertures.shape[1:] != grid.shape:
             raise ValueError("aperture frames must match the grid")
+        if len(apertures) <= N_PARAMETERS:
+            raise ValueError(
+                f"need more than {N_PARAMETERS} frames to fit a pRF; got {len(apertures)}"
+            )
         self.grid = grid
         self.apertures = apertures.astype(np.float64, copy=False)
         self.config = config
@@ -83,6 +134,10 @@ class PRFFitter:
         self._predictions = np.column_stack(
             [predict(candidate.weights(grid), self.apertures) for candidate in self.candidates]
         )
+
+    @property
+    def n_frames(self) -> int:
+        return int(len(self.apertures))
 
     @property
     def bounds(self) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
@@ -110,6 +165,14 @@ class PRFFitter:
             raise ValueError("candidate grid is empty; check grid_size and sigma_bounds")
         return candidates
 
+    def _is_at_bound(self, x0: float, y0: float, sigma: float) -> bool:
+        lower, upper = self.bounds
+        values = (x0, y0, sigma)
+        return any(
+            abs(value - low) <= BOUND_TOLERANCE or abs(value - high) <= BOUND_TOLERANCE
+            for value, low, high in zip(values, lower, upper)
+        )
+
     def _coarse_search(self, response: FloatArray) -> GaussianReceptiveField:
         best_index, best_r2 = 0, -np.inf
         for index in range(self._predictions.shape[1]):
@@ -121,11 +184,9 @@ class PRFFitter:
 
     def fit_unit(self, response: FloatArray) -> UnitFit:
         response = np.asarray(response, dtype=np.float64)
-        if response.shape != (len(self.apertures),):
+        if response.shape != (self.n_frames,):
             raise ValueError("response must have one value per stimulus frame")
-        if not np.isfinite(response).all():
-            return UnitFit.failed()
-        if np.ptp(response) == 0.0:
+        if not np.isfinite(response).all() or np.ptp(response) == 0.0:
             return UnitFit.failed()
 
         start = self._coarse_search(response)
@@ -146,12 +207,13 @@ class PRFFitter:
         except (ValueError, np.linalg.LinAlgError):
             return UnitFit.failed()
 
-        x0, y0, sigma = (float(v) for v in solution.x)
+        x0, y0, sigma = (float(value) for value in solution.x)
         field = GaussianReceptiveField(x0, y0, sigma)
         coefficients, fitted = _solve_amplitude(
             predict(field.weights(self.grid), self.apertures), response
         )
         score = _r_squared(response, fitted)
+        se_x0, se_y0, se_sigma = _standard_errors(solution.jac, float(solution.cost), self.n_frames)
 
         return UnitFit(
             x0=x0,
@@ -162,13 +224,18 @@ class PRFFitter:
             r2=score,
             converged=bool(solution.success) and score >= self.config.r2_threshold,
             n_fev=int(solution.nfev),
+            se_x0=se_x0,
+            se_y0=se_y0,
+            se_sigma=se_sigma,
+            at_bound=self._is_at_bound(x0, y0, sigma),
+            dof=self.n_frames - N_PARAMETERS,
         )
 
     def fit_all(self, activations: FloatArray) -> List[UnitFit]:
-        """Fit every unit in an ``(frames, units)`` activation matrix."""
+        """Fit every unit in a ``(frames, units)`` activation matrix."""
         activations = np.asarray(activations, dtype=np.float64)
         if activations.ndim != 2:
             raise ValueError("activations must have shape (frames, units)")
-        if activations.shape[0] != len(self.apertures):
+        if activations.shape[0] != self.n_frames:
             raise ValueError("activations must have one row per stimulus frame")
         return [self.fit_unit(activations[:, unit]) for unit in range(activations.shape[1])]
