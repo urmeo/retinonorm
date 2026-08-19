@@ -116,22 +116,26 @@ as a negative result.
 Activations are synthesised from known `(x0, y0, sigma)`, fitted, and compared against the
 parameters that generated them.
 
-| Condition | Position error | Sigma error | Minimum R² |
-|---|---|---|---|
-| Noiseless | **0.000 px** | **0.0 %** | 1.0000 |
-| 20 % noise | 0.287 px | 5.2 % | 0.9696 |
-| 50 % noise | 0.772 px | 12.8 % | 0.8326 |
-| Pure noise | — | — | **40 / 40 rejected** |
+<!-- BEGIN GENERATED: recovery -->
+| Condition | Position error, worst (px) | mean (px) | Sigma error, worst (%) | mean (%) | Minimum R² |
+|---|---|---|---|---|---|
+| Noiseless | 0.000 | 0.000 | 0.0 | 0.0 | 1.0000 |
+| 20% noise | 0.287 | 0.197 | 5.2 | 2.3 | 0.9696 |
+| 50% noise | 0.772 | 0.511 | 12.8 | 5.6 | 0.8326 |
+| Pure noise | — | — | — | — | **40 / 40 rejected** |
 
-On pure noise the fitter never once claimed a pRF, and its best spurious R² was 0.195 — below
-the 0.2 acceptance threshold. This is the property that stops a fitter bug from being mistaken
-for a finding.
+Worst and mean are taken over n = 5 ground-truth pRFs. On pure noise the fitter accepted none of 40 units, and its best spurious R² was 0.1947, below the 0.2 acceptance threshold.
+
+<sub>macOS-26.6.1, Python 3.12.13, NumPy 2.5.2, SciPy 1.18.0 | config digest `4d6a856a499e` | generated 2026-08-19</sub>
+<!-- END GENERATED: recovery -->
 
 ### Parameter uncertainty
 
 Standard errors come from the Jacobian at the solution; intervals use Student's *t* with
-`dof = n_frames - 5`, since the projected amplitude and baseline are estimated parameters too.
+`dof = distinct_frames - 5`, since the projected amplitude and baseline are estimated parameters
+too, and a frame shown twice is not a second observation.
 
+<!-- BEGIN GENERATED: uncertainty -->
 | Noise | Fitted x0 | SE | 95 % CI width |
 |---|---|---|---|
 | 0.0 | 12.000 | 0.0000 | 0.000 |
@@ -139,7 +143,21 @@ Standard errors come from the Jacobian at the solution; intervals use Student's 
 | 0.3 | 11.909 | 0.2806 | 1.118 |
 | 0.6 | 11.881 | 0.5354 | 2.133 |
 
-Across five noise realisations the interval contained the generating parameter in every case.
+The noiseless row is a numerical floor, not a measurement: the residual is at machine precision, so the linearised interval collapses. It is shown to make the scaling of the rows below it legible.
+
+Empirical coverage of the nominal 95% interval:
+
+| Position | Noise | n | Coverage | 95 % binomial CI |
+|---|---|---|---|---|
+| interior | 0.2 | 200 | 0.935 | [0.901, 0.969] |
+| interior | 0.5 | 200 | 0.930 | [0.895, 0.965] |
+| near edge | 0.2 | 200 | 0.930 | [0.895, 0.965] |
+| near edge | 0.5 | 200 | 0.915 | [0.876, 0.954] |
+
+Coverage runs slightly under nominal, and lowest near the field edge at high noise, where the linearisation behind the interval is weakest.
+
+<sub>macOS-26.6.1, Python 3.12.13, NumPy 2.5.2, SciPy 1.18.0 | config digest `4d6a856a499e` | generated 2026-08-19</sub>
+<!-- END GENERATED: uncertainty -->
 
 ### Cross-validation and leakage
 
@@ -148,30 +166,36 @@ white noise. Measurement showed it does not. The leak requires **two** ingredien
 apertures *and* a response correlated across neighbouring frames. Real activation timecourses
 have both, because a bar moving one step barely changes the input.
 
-| Response | Grouped CV | Random-split CV | Leak |
-|---|---|---|---|
-| White noise | −0.204 | −0.209 | −0.004 |
-| Autocorrelated, lag-1 r = 0.83 | −0.672 | **+0.116** | **+0.788** |
+<!-- BEGIN GENERATED: cross_validation -->
+| Response | n seeds | Grouped CV | Random-split CV | Leak | Leak positive |
+|---|---|---|---|---|---|
+| White | 20 | -0.248 ± 0.135 | -0.339 ± 0.192 | -0.091 ± 0.231 | 8 / 20 |
+| Autocorrelated | 20 | -0.624 ± 0.385 | -0.164 ± 0.189 | +0.459 ± 0.402 | 17 / 20 |
 
-The second row is the failure mode in one line: a random split turns a model that is clearly
-failing into one that appears to work. Both cases are tests, so the mechanism stays pinned; if
-the white-noise case ever starts failing too, the cause is aperture overlap rather than response
+Mean ± SD over seeds 21–40. The carrier is a width-3 boxcar, whose lag-1 autocorrelation measured 0.651 ± 0.086 against a theoretical 0.667.
+
+<sub>macOS-26.6.1, Python 3.12.13, NumPy 2.5.2, SciPy 1.18.0 | config digest `4d6a856a499e` | generated 2026-08-19</sub>
+<!-- END GENERATED: cross_validation -->
+
+A random frame split raises the apparent score on temporally correlated noise in most
+realisations tested, while on white noise the effect is indistinguishable from zero given the
+realisation-to-realisation spread. Both cases are tests, so the mechanism stays pinned: if the
+white-noise case ever starts leaking too, the cause is aperture overlap rather than response
 autocorrelation.
 
 ### Runtime
 
+<!-- BEGIN GENERATED: runtime -->
 | Units | Fit (s) | Per unit (ms) | CV (s) | CV factor |
 |---|---|---|---|---|
-| 1 | 0.010 | 9.6 | 0.043 | 4.5× |
-| 10 | 0.081 | 8.1 | 0.409 | 5.0× |
-| 100 | 0.821 | 8.2 | 4.090 | 5.0× |
+| 1 | 0.009 | 9.2 | 0.044 | 4.8× |
+| 10 | 0.094 | 9.4 | 0.446 | 4.8× |
+| 100 | 0.919 | 9.2 | 4.300 | 4.7× |
 
-Per-unit cost is flat, so nothing quadratic is hiding in the loop. Cross-validation costs a
-constant 5.0× — four folds plus the full fit. Extrapolating, 10 000 units take roughly 1.4
-minutes single-threaded, so parallelism is not yet worth its complexity.
+Per-unit cost is flat, so nothing quadratic hides in the loop. Cross-validation costs a roughly constant factor: 4 folds plus the full fit. On this machine 10 000 units extrapolate to about 1.5 minutes single-threaded. Timings are hardware-specific; the environment is recorded below.
 
-Measured on an Apple M2, 8 GB RAM, at 64 px resolution with 80 frames and 300 candidates.
-Reproduce with `python benchmarks/benchmark_scaling.py`.
+<sub>macOS-26.6.1, Python 3.12.13, NumPy 2.5.2, SciPy 1.18.0 | config digest `4d6a856a499e` | generated 2026-08-19</sub>
+<!-- END GENERATED: runtime -->
 
 ---
 
