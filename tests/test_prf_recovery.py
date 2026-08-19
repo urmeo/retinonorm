@@ -11,13 +11,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cortexprobe.config import FitConfig, StimulusConfig
-from cortexprobe.geometry import Grid
-from cortexprobe.prf.fit import PRFFitter
-from cortexprobe.prf.model import GaussianReceptiveField, predict
-from cortexprobe.stimuli import build_apertures
+from .conftest import synthesise
 
-RESOLUTION = 64
 GROUND_TRUTH = [
     (0.0, 0.0, 5.0),
     (12.0, 8.0, 4.0),
@@ -27,41 +22,8 @@ GROUND_TRUTH = [
 ]
 
 
-@pytest.fixture(scope="module")
-def apertures() -> np.ndarray:
-    config = StimulusConfig(resolution=RESOLUTION, n_steps=20, directions=(0, 45, 90, 135))
-    return build_apertures(config, "bar").as_float()
-
-
-@pytest.fixture(scope="module")
-def grid() -> Grid:
-    return Grid(RESOLUTION)
-
-
-@pytest.fixture(scope="module")
-def fitter(grid: Grid, apertures: np.ndarray) -> PRFFitter:
-    return PRFFitter(grid, apertures, FitConfig(grid_size=10, sigma_bounds=(1.0, 20.0)))
-
-
-def synthesise(
-    grid: Grid,
-    apertures: np.ndarray,
-    truth: tuple,
-    beta: float = 3.0,
-    baseline: float = 0.5,
-    noise: float = 0.0,
-    seed: int = 0,
-) -> np.ndarray:
-    x0, y0, sigma = truth
-    clean = beta * predict(GaussianReceptiveField(x0, y0, sigma).weights(grid), apertures) + baseline
-    if noise <= 0.0:
-        return clean
-    rng = np.random.default_rng(seed)
-    return clean + rng.normal(0.0, noise * float(np.std(clean)), size=clean.shape)
-
-
 @pytest.mark.parametrize("truth", GROUND_TRUTH)
-def test_recovers_noiseless_prf(fitter: PRFFitter, grid: Grid, apertures: np.ndarray, truth: tuple) -> None:
+def test_recovers_noiseless_prf(fitter, grid, apertures, truth) -> None:
     fit = fitter.fit_unit(synthesise(grid, apertures, truth))
     x0, y0, sigma = truth
 
@@ -72,9 +34,7 @@ def test_recovers_noiseless_prf(fitter: PRFFitter, grid: Grid, apertures: np.nda
 
 
 @pytest.mark.parametrize("truth", GROUND_TRUTH)
-def test_recovers_prf_under_moderate_noise(
-    fitter: PRFFitter, grid: Grid, apertures: np.ndarray, truth: tuple
-) -> None:
+def test_recovers_prf_under_moderate_noise(fitter, grid, apertures, truth) -> None:
     fit = fitter.fit_unit(synthesise(grid, apertures, truth, noise=0.2, seed=7))
     x0, y0, _ = truth
 
@@ -83,7 +43,7 @@ def test_recovers_prf_under_moderate_noise(
     assert np.hypot(fit.x0 - x0, fit.y0 - y0) < 1.5
 
 
-def test_rejects_pure_noise(fitter: PRFFitter) -> None:
+def test_rejects_pure_noise(fitter) -> None:
     rng = np.random.default_rng(11)
     responses = rng.normal(size=(len(fitter.apertures), 40))
 
@@ -93,14 +53,14 @@ def test_rejects_pure_noise(fitter: PRFFitter) -> None:
     assert rejected / len(fits) >= 0.95
 
 
-def test_amplitude_and_baseline_recovered(fitter: PRFFitter, grid: Grid, apertures: np.ndarray) -> None:
+def test_amplitude_and_baseline_recovered(fitter, grid, apertures) -> None:
     fit = fitter.fit_unit(synthesise(grid, apertures, (8.0, -6.0, 5.0), beta=4.0, baseline=1.5))
 
     assert fit.beta == pytest.approx(4.0, rel=0.05)
     assert fit.baseline == pytest.approx(1.5, abs=0.05)
 
 
-def test_constant_response_is_not_fitted(fitter: PRFFitter) -> None:
+def test_constant_response_is_not_fitted(fitter) -> None:
     fit = fitter.fit_unit(np.full(len(fitter.apertures), 2.0))
 
     assert not fit.converged
@@ -108,19 +68,19 @@ def test_constant_response_is_not_fitted(fitter: PRFFitter) -> None:
     assert np.isnan(fit.x0)
 
 
-def test_non_finite_response_is_not_fitted(fitter: PRFFitter) -> None:
+def test_non_finite_response_is_not_fitted(fitter) -> None:
     response = np.zeros(len(fitter.apertures))
     response[3] = np.nan
 
     assert not fitter.fit_unit(response).converged
 
 
-def test_wrong_length_response_raises(fitter: PRFFitter) -> None:
+def test_wrong_length_response_raises(fitter) -> None:
     with pytest.raises(ValueError):
         fitter.fit_unit(np.zeros(len(fitter.apertures) + 1))
 
 
-def test_fitted_parameters_respect_bounds(fitter: PRFFitter, grid: Grid, apertures: np.ndarray) -> None:
+def test_fitted_parameters_respect_bounds(fitter, grid, apertures) -> None:
     lower, upper = fitter.bounds
 
     for truth in GROUND_TRUTH:
@@ -130,7 +90,7 @@ def test_fitted_parameters_respect_bounds(fitter: PRFFitter, grid: Grid, apertur
         assert lower[2] <= fit.sigma <= upper[2]
 
 
-def test_fit_is_deterministic(fitter: PRFFitter, grid: Grid, apertures: np.ndarray) -> None:
+def test_fit_is_deterministic(fitter, grid, apertures) -> None:
     response = synthesise(grid, apertures, (10.0, 10.0, 6.0), noise=0.1, seed=3)
 
     first, second = fitter.fit_unit(response), fitter.fit_unit(response)
@@ -138,6 +98,6 @@ def test_fit_is_deterministic(fitter: PRFFitter, grid: Grid, apertures: np.ndarr
     assert (first.x0, first.y0, first.sigma) == (second.x0, second.y0, second.sigma)
 
 
-def test_fit_all_rejects_wrong_frame_count(fitter: PRFFitter) -> None:
+def test_fit_all_rejects_wrong_frame_count(fitter) -> None:
     with pytest.raises(ValueError):
         fitter.fit_all(np.zeros((len(fitter.apertures) + 2, 3)))
