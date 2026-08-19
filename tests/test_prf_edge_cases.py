@@ -368,3 +368,34 @@ def test_an_optimiser_failure_is_reported_as_an_unfitted_unit(
 
     assert not fit.accepted
     assert np.isnan(fit.x0)
+
+
+def test_non_finite_apertures_are_refused(grid) -> None:
+    """A NaN aperture poisons every candidate prediction; refuse where the cause is visible."""
+    apertures = np.zeros((20, *grid.shape))
+    apertures[0, 0, 0] = np.nan
+
+    with pytest.raises(ValueError, match="apertures must be finite"):
+        PRFFitter(grid, apertures, FitConfig(grid_size=5, sigma_bounds=(1.0, 10.0)))
+
+    apertures[0, 0, 0] = np.inf
+    with pytest.raises(ValueError, match="apertures must be finite"):
+        PRFFitter(grid, apertures, FitConfig(grid_size=5, sigma_bounds=(1.0, 10.0)))
+
+
+def test_confidence_interval_rejects_an_unknown_parameter(fitter, grid, apertures) -> None:
+    """Naming a parameter that was never fitted must say so, not raise AttributeError."""
+    fit = fitter.fit_unit(synthesise(grid, apertures, (12.0, 8.0, 5.0)))
+
+    with pytest.raises(ValueError, match="parameter must be one of"):
+        fit.confidence_interval("beta")
+
+
+@pytest.mark.parametrize("parameter", ["x0", "y0", "sigma"])
+def test_confidence_interval_accepts_every_fitted_parameter(
+    fitter, grid, apertures, parameter
+) -> None:
+    fit = fitter.fit_unit(synthesise(grid, apertures, (12.0, 8.0, 5.0), noise=0.2, seed=5))
+    low, high = fit.confidence_interval(parameter)
+
+    assert low < getattr(fit, parameter) < high

@@ -26,6 +26,9 @@ from .model import GaussianReceptiveField, predict
 # Three nonlinear parameters plus amplitude and baseline solved by projection.
 N_PARAMETERS = 5
 
+# The parameters the optimiser searches, and so the only ones with a standard error attached.
+FITTED_PARAMETERS = ("x0", "y0", "sigma")
+
 # A fitted value this close to its search bound is reported as pinned rather than estimated.
 BOUND_TOLERANCE = 1e-3
 
@@ -125,6 +128,8 @@ class UnitFit:
         linear at the solution. It is a summary of fit precision, not a guarantee of coverage
         under model misspecification.
         """
+        if parameter not in FITTED_PARAMETERS:
+            raise ValueError(f"parameter must be one of {FITTED_PARAMETERS}; got {parameter!r}")
         if not 0.0 < level < 1.0:
             raise ValueError("level must lie in (0, 1)")
         estimate = getattr(self, parameter)
@@ -206,6 +211,11 @@ class PRFFitter:
             raise ValueError(
                 f"need more than {N_PARAMETERS} frames to fit a pRF; got {len(apertures)}"
             )
+        if not np.isfinite(apertures).all():
+            # Non-finite apertures poison every candidate prediction built below, so each
+            # subsequent fit either returns a NaN pRF or dies inside LAPACK with an error that
+            # names neither the aperture nor the frame. Refuse here, where the cause is visible.
+            raise ValueError("apertures must be finite; found NaN or inf")
         self.grid = grid
         self.apertures = apertures.astype(np.float64, copy=False)
         self.config = config
