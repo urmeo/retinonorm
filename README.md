@@ -152,7 +152,7 @@ Per-unit cost is flat, so nothing quadratic hides in the loop. Cross-validation 
 - **`beta > 0` required** — a suppressed unit fits a flawless pRF with the sign reversed (`beta=-3.000`, `R²=1.0000`).
 - **`converged` ≠ `accepted`** — `converged` is the optimiser; `accepted` adds R² threshold, positive amplitude, σ not pinned. Centre at the field edge stays accepted; pinned σ does not.
 - **Degrees of freedom count distinct frames** — a frame shown twice is not a second observation; counting duplicates understated SE by √2.
-- **Misspecification reported, not enforced** — `second_field_r2`: single-lobe < 0.03, pure noise 0.06, two-lobe 0.29–0.44.
+- **Misspecification reported, not enforced** — `second_field_r2`: single-lobe 0.000–0.023, pure noise 0.056, two-lobe 0.206–0.473 (margin narrows as noise grows; no cut is claimed to transfer).
 
 [Full records: `docs/adr/`](docs/adr/)
 
