@@ -11,7 +11,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Type, TypeVar, get_args, get_origin, get_type_hints
+from typing import Any, Optional, TypeVar, get_args, get_origin, get_type_hints
 
 T = TypeVar("T", bound="ConfigBase")
 
@@ -36,11 +36,11 @@ def _restore(annotation: Any, value: Any) -> Any:
 class ConfigBase:
     """Shared serialisation for every configuration object."""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls: Type[T], payload: Dict[str, Any]) -> T:
+    def from_dict(cls: type[T], payload: dict[str, Any]) -> T:
         hints = get_type_hints(cls)
         known = {field.name for field in fields(cls)}
         unexpected = set(payload) - known
@@ -67,7 +67,7 @@ class StimulusConfig(ConfigBase):
     resolution: int = 128
     n_steps: int = 32
     bar_width_frac: float = 0.125
-    directions: Tuple[int, ...] = (0, 45, 90, 135, 180, 225, 270, 315)
+    directions: tuple[int, ...] = (0, 45, 90, 135, 180, 225, 270, 315)
     wedge_span_deg: float = 45.0
     ring_thickness_frac: float = 0.125
     max_fold_similarity: float = 0.75
@@ -111,7 +111,7 @@ class ModelConfig(ConfigBase):
     """Which network to probe, and where to tap it."""
 
     name: str = "alexnet"
-    layers: Tuple[str, ...] = ("features.2", "features.5", "features.12")
+    layers: tuple[str, ...] = ("features.2", "features.5", "features.12")
     weights_seed: Optional[int] = None
     pool_to: int = 8
 
@@ -142,7 +142,7 @@ class FitConfig(ConfigBase):
     """
 
     grid_size: int = 12
-    sigma_bounds: Tuple[float, float] = (1.0, 20.0)
+    sigma_bounds: tuple[float, float] = (1.0, 20.0)
     max_nfev: int = 200
     r2_threshold: float = 0.2
 
@@ -175,8 +175,8 @@ class RunConfig(ConfigBase):
     _SECTIONS = {"stimulus": StimulusConfig, "model": ModelConfig, "fit": FitConfig}
 
     @classmethod
-    def from_dict(cls, payload: Dict[str, Any]) -> RunConfig:
-        sections: Dict[str, Any] = dict(payload)
+    def from_dict(cls, payload: dict[str, Any]) -> RunConfig:
+        sections: dict[str, Any] = dict(payload)
         for name, section_type in cls._SECTIONS.items():
             if name in sections:
                 sections[name] = section_type.from_dict(sections[name])
