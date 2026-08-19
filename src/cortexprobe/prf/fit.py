@@ -18,11 +18,10 @@ import numpy as np
 from scipy.optimize import least_squares
 from scipy.stats import t as student_t
 
+from ..arrays import FloatArray
 from ..config import ConfigError, FitConfig
 from ..geometry import Grid
 from .model import GaussianReceptiveField, predict
-
-FloatArray = np.ndarray
 
 # Three nonlinear parameters plus amplitude and baseline solved by projection.
 N_PARAMETERS = 5

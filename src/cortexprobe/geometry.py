@@ -11,7 +11,7 @@ from functools import cached_property
 
 import numpy as np
 
-FloatArray = np.ndarray
+from .arrays import BoolArray, FloatArray
 
 
 @dataclass(frozen=True)
@@ -54,10 +54,11 @@ class Grid:
     @cached_property
     def polar_angle(self) -> FloatArray:
         """Angle in degrees, counter-clockwise from the positive x axis, in [0, 360)."""
-        return np.degrees(np.arctan2(self.y, self.x)) % 360.0
+        angle: FloatArray = np.degrees(np.arctan2(self.y, self.x)) % 360.0
+        return angle
 
     @cached_property
-    def field_mask(self) -> np.ndarray:
+    def field_mask(self) -> BoolArray:
         """Circular aperture inscribed in the square field."""
         return self.eccentricity <= self.radius
 

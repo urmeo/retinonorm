@@ -18,13 +18,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from ..arrays import FloatArray, IntArray
 from ..config import FitConfig
 from ..geometry import Grid
 from .fit import N_PARAMETERS, PRFFitter, UnitFit, _r_squared
 from .model import GaussianReceptiveField, predict
-
-FloatArray = np.ndarray
-IntArray = np.ndarray
 
 
 @dataclass(frozen=True)

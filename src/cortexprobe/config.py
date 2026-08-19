@@ -11,7 +11,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
-from typing import Any, Optional, TypeVar, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, Optional, TypeVar, get_args, get_origin, get_type_hints
 
 T = TypeVar("T", bound="ConfigBase")
 
@@ -172,7 +172,11 @@ class RunConfig(ConfigBase):
     fit: FitConfig = FitConfig()
     seed: int = 0
 
-    _SECTIONS = {"stimulus": StimulusConfig, "model": ModelConfig, "fit": FitConfig}
+    _SECTIONS: ClassVar[dict[str, type[ConfigBase]]] = {
+        "stimulus": StimulusConfig,
+        "model": ModelConfig,
+        "fit": FitConfig,
+    }
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> RunConfig:
@@ -180,7 +184,7 @@ class RunConfig(ConfigBase):
         for name, section_type in cls._SECTIONS.items():
             if name in sections:
                 sections[name] = section_type.from_dict(sections[name])
-        return super().from_dict(sections)  # type: ignore[return-value]
+        return super().from_dict(sections)
 
     def to_json(self) -> str:
         """Canonical JSON: sorted keys and fixed separators, so the digest is stable."""
