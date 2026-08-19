@@ -27,7 +27,7 @@ def test_recovers_noiseless_prf(fitter, grid, apertures, truth) -> None:
     fit = fitter.fit_unit(synthesise(grid, apertures, truth))
     x0, y0, sigma = truth
 
-    assert fit.converged
+    assert fit.accepted
     assert fit.r2 > 0.99
     assert np.hypot(fit.x0 - x0, fit.y0 - y0) < 0.5
     assert abs(fit.sigma - sigma) / sigma < 0.05
@@ -38,7 +38,7 @@ def test_recovers_prf_under_moderate_noise(fitter, grid, apertures, truth) -> No
     fit = fitter.fit_unit(synthesise(grid, apertures, truth, noise=0.2, seed=7))
     x0, y0, _ = truth
 
-    assert fit.converged
+    assert fit.accepted
     assert fit.r2 > 0.8
     assert np.hypot(fit.x0 - x0, fit.y0 - y0) < 1.5
 
@@ -48,7 +48,7 @@ def test_rejects_pure_noise(fitter) -> None:
     responses = rng.normal(size=(len(fitter.apertures), 40))
 
     fits = fitter.fit_all(responses)
-    rejected = sum(not fit.converged or fit.r2 < fitter.config.r2_threshold for fit in fits)
+    rejected = sum(not fit.accepted for fit in fits)
 
     assert rejected / len(fits) >= 0.95
 
@@ -63,6 +63,7 @@ def test_amplitude_and_baseline_recovered(fitter, grid, apertures) -> None:
 def test_constant_response_is_not_fitted(fitter) -> None:
     fit = fitter.fit_unit(np.full(len(fitter.apertures), 2.0))
 
+    assert not fit.accepted
     assert not fit.converged
     assert fit.r2 == 0.0
     assert np.isnan(fit.x0)
@@ -72,7 +73,7 @@ def test_non_finite_response_is_not_fitted(fitter) -> None:
     response = np.zeros(len(fitter.apertures))
     response[3] = np.nan
 
-    assert not fitter.fit_unit(response).converged
+    assert not fitter.fit_unit(response).accepted
 
 
 def test_wrong_length_response_raises(fitter) -> None:
