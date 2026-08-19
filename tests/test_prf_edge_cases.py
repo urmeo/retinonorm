@@ -47,7 +47,7 @@ def test_centre_never_escapes_the_field(fitter, grid, apertures) -> None:
 
 
 def test_recovers_smallest_admissible_sigma(grid, apertures) -> None:
-    config = FitConfig(grid_size=10, sigma_bounds=(1.0, 20.0))
+    config = FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0))
     fitter = PRFFitter(grid, apertures, config)
 
     fit = fitter.fit_unit(synthesise(grid, apertures, (0.0, 0.0, 1.5)))
@@ -57,13 +57,13 @@ def test_recovers_smallest_admissible_sigma(grid, apertures) -> None:
 
 
 def test_recovers_largest_admissible_sigma(grid, apertures) -> None:
-    config = FitConfig(grid_size=10, sigma_bounds=(1.0, 25.0))
+    config = FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0))
     fitter = PRFFitter(grid, apertures, config)
 
-    fit = fitter.fit_unit(synthesise(grid, apertures, (0.0, 0.0, 18.0)))
+    fit = fitter.fit_unit(synthesise(grid, apertures, (0.0, 0.0, 8.0)))
 
     assert fit.accepted
-    assert abs(fit.sigma - 18.0) / 18.0 < 0.15
+    assert abs(fit.sigma - 8.0) / 8.0 < 0.15
 
 
 def test_sigma_outside_search_range_is_flagged_at_bound(grid, apertures) -> None:
@@ -144,7 +144,7 @@ def test_sigma_pinned_at_the_ceiling_is_not_accepted(grid, apertures) -> None:
 
 def test_a_centre_at_the_field_edge_is_still_accepted(grid, apertures) -> None:
     """Receptive fields really do sit near the field boundary; that is a measurement."""
-    fitter = PRFFitter(grid, apertures, FitConfig(grid_size=10, sigma_bounds=(1.0, 20.0)))
+    fitter = PRFFitter(grid, apertures, FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0)))
 
     fit = fitter.fit_unit(synthesise(grid, apertures, (32.0, 0.0, 4.0)))
 
@@ -194,3 +194,44 @@ def test_a_suppressed_unit_is_not_accepted_as_a_prf(fitter, grid, apertures) -> 
     assert driven_fit.beta > 0.0
     assert driven_fit.accepted
     assert np.hypot(driven_fit.x0 - 12.0, driven_fit.y0 - 8.0) < 0.5
+
+
+# --- unit volume is guarded at both ends of the sigma range --------------------------------
+
+
+def test_sigma_floor_below_the_pixel_pitch_is_rejected() -> None:
+    """The lower guard: an under-sampled Gaussian silently loses its unit volume."""
+    from cortexprobe.config import ConfigError
+
+    with pytest.raises(ConfigError, match="at least 1 pixel"):
+        FitConfig(sigma_bounds=(0.5, 10.0))
+
+
+def test_sigma_ceiling_the_grid_cannot_represent_is_rejected(grid, apertures) -> None:
+    """The upper guard: a Gaussian wider than about resolution / 6 is truncated by the field."""
+    from cortexprobe.config import ConfigError
+
+    with pytest.raises(ConfigError, match="keeps only"):
+        PRFFitter(grid, apertures, FitConfig(grid_size=8, sigma_bounds=(1.0, 20.0)))
+
+
+def test_a_sigma_ceiling_the_grid_can_represent_is_accepted(grid, apertures) -> None:
+    PRFFitter(grid, apertures, FitConfig(grid_size=8, sigma_bounds=(1.0, 10.0)))
+
+
+@pytest.mark.parametrize("sigma", [1.0, 5.0, 10.0])
+def test_unit_volume_survives_across_the_admissible_range(grid, sigma) -> None:
+    from cortexprobe.prf.fit import MIN_ON_GRID_VOLUME
+
+    weights = GaussianReceptiveField(0.0, 0.0, sigma).weights(grid)
+
+    assert weights[grid.field_mask].sum() >= MIN_ON_GRID_VOLUME
+
+
+def test_unit_volume_is_lost_above_the_admissible_range(grid) -> None:
+    """Pins the reason the ceiling exists, so removing the guard fails a test."""
+    from cortexprobe.prf.fit import MIN_ON_GRID_VOLUME
+
+    weights = GaussianReceptiveField(0.0, 0.0, 20.0).weights(grid)
+
+    assert weights[grid.field_mask].sum() < MIN_ON_GRID_VOLUME

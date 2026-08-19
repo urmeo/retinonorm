@@ -62,9 +62,12 @@ class GaussianReceptiveField(ReceptiveField):
         by construction, and H1 -- pRF size increasing with depth -- would be guaranteed by
         the parameterisation instead of measured.
 
-        The Gaussian is not truncated. Apertures are already confined to the circular field
-        mask, so zeroing the field outside that mask cannot change any prediction, and
-        leaving it analytically exact keeps the unit-volume property directly testable.
+        The Gaussian is not truncated by this function, but the grid truncates it anyway: the
+        unit-volume property holds only while ``sigma`` is small relative to the field. Ninety
+        nine per cent of the volume lies within +/- 3 sigma, so it survives while sigma stays
+        under roughly ``resolution / 6``; on a 64 px grid a sigma of 20 retains 0.723 of it.
+        :class:`~cortexprobe.prf.fit.PRFFitter` refuses a sigma ceiling that breaches this,
+        because the shortfall grows with sigma and would bias size-versus-depth comparisons.
         """
         dx = grid.x - self.x0
         dy = grid.y - self.y0

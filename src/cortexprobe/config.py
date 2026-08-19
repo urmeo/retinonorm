@@ -132,10 +132,17 @@ class FitConfig(ConfigBase):
 
     A coarse grid selects the basin; nonlinear refinement finds the minimum inside it. Grid
     search alone is too coarse to trust, and refinement alone settles into local minima.
+
+    Both ends of ``sigma_bounds`` are constrained, for the same reason from opposite
+    directions. The floor is checked here: below the pixel pitch a Gaussian is under-sampled.
+    The ceiling depends on the field size and so is checked by
+    :class:`~cortexprobe.prf.fit.PRFFitter`, which knows the grid: much beyond
+    ``resolution / 6`` a Gaussian is truncated by the field edge. The default ceiling of 20 px
+    suits the default 128 px stimulus.
     """
 
     grid_size: int = 12
-    sigma_bounds: Tuple[float, float] = (1.0, 40.0)
+    sigma_bounds: Tuple[float, float] = (1.0, 20.0)
     max_nfev: int = 200
     r2_threshold: float = 0.2
 

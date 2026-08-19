@@ -57,7 +57,7 @@ def main() -> None:
     )
     sequence = build_apertures(config, "bar")
     apertures = sequence.as_float()
-    fit_config = FitConfig(grid_size=10, sigma_bounds=(1.0, 20.0))
+    fit_config = FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0))
 
     setup, fitter = time_call(PRFFitter, grid, apertures, fit_config)
     print(f"grid {arguments.resolution}px | {fitter.n_frames} frames | "
