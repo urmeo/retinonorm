@@ -1,0 +1,36 @@
+{
+  "fit": {
+    "grid_size": 10,
+    "max_nfev": 200,
+    "r2_threshold": 0.2,
+    "sigma_bounds": [
+      1.0,
+      10.0
+    ]
+  },
+  "model": {
+    "layers": [
+      "features.2",
+      "features.5",
+      "features.12"
+    ],
+    "name": "alexnet",
+    "pool_to": 8,
+    "weights_seed": null
+  },
+  "seed": 0,
+  "stimulus": {
+    "bar_width_frac": 0.125,
+    "directions": [
+      0,
+      45,
+      90,
+      135
+    ],
+    "max_fold_similarity": 0.75,
+    "n_steps": 20,
+    "resolution": 64,
+    "ring_thickness_frac": 0.125,
+    "wedge_span_deg": 45.0
+  }
+}

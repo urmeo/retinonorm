@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+title: "CortexProbe: population receptive fields and lesion effects in convolutional models of the visual hierarchy"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - given-names: Urme
+license: MIT
+version: 0.1.0
+abstract: >-
+  A measurement instrument for population receptive fields in convolutional
+  networks. Mapping stimuli are generated in-repo and unit activation
+  timecourses are fitted with the Dumoulin and Wandell (2008) pRF model,
+  validated against synthetic ground truth with held-out cross-validation
+  grouped by sweep axis. The instrument is validated; no network has been
+  probed, and the hypotheses the project exists to test remain untested.
+keywords:
+  - neuroscience
+  - population-receptive-field
+  - retinotopy
+  - vision
+  - lesion
+references:
+  - type: article
+    title: "Population receptive field estimates in human visual cortex"
+    authors:
+      - given-names: Serge O.
+        family-names: Dumoulin
+      - given-names: Brian A.
+        family-names: Wandell
+    journal: NeuroImage
+    volume: 39
+    issue: 2
+    start: 647
+    end: 660
+    year: 2008
+    doi: 10.1016/j.neuroimage.2007.09.034
