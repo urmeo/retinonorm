@@ -6,6 +6,9 @@ says nothing about whether the pRF generalises to stimulus positions the fit nev
 Folds are split by *sweep group*, never by individual frame. Adjacent frames within a sweep
 show overlapping apertures, so a random frame split would put near-duplicates on both sides of
 the train/test boundary and report a generalisation score that is really memorisation.
+
+A group is a sweep *axis*, not a sweep direction: see :class:`~cortexprobe.stimuli.BarSweep`
+for why a 180 degree return sweep is the same stimulus run backwards.
 """
 
 from __future__ import annotations
