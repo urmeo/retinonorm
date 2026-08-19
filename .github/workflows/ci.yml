@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    name: py${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is the floor README claims and pyproject declares; 3.12 is the version the
+        # committed validation tables were recorded on. Both are checked, with no exceptions:
+        # the config round trip resolves annotations at runtime and fails on 3.9 alone.
+        python-version: ["3.9", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: python -m pip install -e '.[dev]'
+
+      - name: Format
+        run: python -m ruff format --check .
+
+      - name: Lint
+        run: python -m ruff check .
+
+      - name: Types
+        run: python -m mypy
+
+      - name: Tests
+        run: python -m pytest -q --cov
+
+  reproducibility:
+    name: numbers reproduce on py${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: python -m pip install -e '.[dev]'
+
+      - name: Every number in README.md still reproduces
+        # --check re-measures everything, compares against results/validation.json within a
+        # tolerance far tighter than any figure the tables display, and confirms the committed
+        # Markdown was rendered from those numbers. It writes nothing.
+        #
+        # A tolerance rather than a byte diff, deliberately. Measurements agree to about ten
+        # significant figures across Python, NumPy and SciPy versions, but the last bits move
+        # with the BLAS underneath, and a gate that went red for that reason would be ignored.
+        # Because it is tolerant, it can run on both supported versions rather than being
+        # pinned to the one the tables were recorded on.
+        run: python scripts/generate_validation_report.py --check
