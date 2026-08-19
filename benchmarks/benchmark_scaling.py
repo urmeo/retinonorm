@@ -63,7 +63,10 @@ def main() -> None:
           f"{len(fitter.candidates)} candidates | setup {setup * 1000:.0f} ms\n")
 
     counts: list[int] = [n for n in UNIT_COUNTS if n <= arguments.max_units]
-    print(f"{'units':>6} {'fit (s)':>9} {'per unit (ms)':>14} {'cv (s)':>9} {'cv per unit (ms)':>17} {'cv factor':>10}")
+    print(
+        f"{'units':>6} {'fit (s)':>9} {'per unit (ms)':>14} "
+        f"{'cv (s)':>9} {'cv per unit (ms)':>17} {'cv factor':>10}"
+    )
     print("-" * 70)
 
     validator = CrossValidator(grid, apertures, sequence.group, fit_config)

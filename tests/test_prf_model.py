@@ -87,14 +87,14 @@ def test_prediction_rejects_a_field_that_does_not_match_the_frames() -> None:
 def test_prediction_scales_linearly_with_the_aperture() -> None:
     grid = Grid(32)
     weights = GaussianReceptiveField(2.0, 2.0, 4.0).weights(grid)
-    apertures = np.random.default_rng(0).random((5,) + grid.shape)
+    apertures = np.random.default_rng(0).random((5, *grid.shape))
 
     assert np.allclose(predict(weights, 2.0 * apertures), 2.0 * predict(weights, apertures))
 
 
 def test_design_matrix_stacks_one_column_per_candidate() -> None:
     grid = Grid(32)
-    apertures = np.random.default_rng(1).random((7,) + grid.shape)
+    apertures = np.random.default_rng(1).random((7, *grid.shape))
     fields = [
         GaussianReceptiveField(0.0, 0.0, 3.0),
         GaussianReceptiveField(5.0, -5.0, 2.0),

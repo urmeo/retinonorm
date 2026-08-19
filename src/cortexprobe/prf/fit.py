@@ -246,7 +246,7 @@ class PRFFitter:
 
     @property
     def n_frames(self) -> int:
-        return int(len(self.apertures))
+        return len(self.apertures)
 
     @property
     def bounds(self) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
@@ -326,7 +326,9 @@ class PRFFitter:
         def residual(params: Sequence[float]) -> FloatArray:
             x0, y0, sigma = params
             field = GaussianReceptiveField(float(x0), float(y0), float(sigma))
-            _, fitted = _solve_amplitude(predict(field.weights(self.grid), self.apertures), response)
+            _, fitted = _solve_amplitude(
+                predict(field.weights(self.grid), self.apertures), response
+            )
             return fitted - response
 
         try:
