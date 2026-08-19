@@ -53,6 +53,8 @@ ignore = ["N803", "N806"]
 # Python 3.9, which this project still supports. PEP 585 builtin generics are fine: they
 # landed in 3.9.
 "src/cortexprobe/config.py" = ["UP007", "UP045"]
+# The report script emits typographic Markdown: en dashes for ranges, x for the CV factor.
+"scripts/*" = ["RUF001"]
 
 [tool.mypy]
 # No python_version pin: mypy takes it from the interpreter, so the 3.9 and 3.12 CI jobs each
