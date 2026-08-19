@@ -110,3 +110,28 @@ def test_degrees_of_freedom_count_distinct_frames(grid, fit_config) -> None:
 
     assert fitter.n_frames == 160
     assert fitter.n_independent_frames == 80
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("truth", [(12.0, 8.0, 5.0), (28.0, 0.0, 4.0)])
+@pytest.mark.parametrize("noise", [0.2, 0.5])
+def test_interval_coverage_is_calibrated(fitter, grid, apertures, truth, noise) -> None:
+    """Empirical coverage of the nominal 95 per cent interval, over many realisations.
+
+    Five successes prove very little about a 95 per cent interval: you would see 5/5 about 77
+    per cent of the time even at 95 per cent true coverage, and about 59 per cent of the time
+    at 90 per cent. Two hundred realisations narrow that enough to be worth asserting.
+
+    Both an interior position and one near the field edge are tested, since the linearisation
+    behind the interval is weakest where the stimulus constrains the fit least. Measured
+    coverage runs 0.915 to 0.935 against a nominal 0.95, so the interval is mildly optimistic
+    -- which is a property worth knowing and stating, not one to paper over with a loose bound.
+    """
+    realisations = 200
+    covered = 0
+    for seed in range(realisations):
+        response = synthesise(grid, apertures, truth, noise=noise, seed=1000 + seed)
+        low, high = fitter.fit_unit(response).confidence_interval("x0")
+        covered += bool(low <= truth[0] <= high)
+
+    assert 0.90 <= covered / realisations <= 0.99
