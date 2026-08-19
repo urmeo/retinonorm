@@ -105,9 +105,7 @@ def test_degrees_of_freedom_count_distinct_frames(grid, fit_config) -> None:
 
     from .conftest import RESOLUTION
 
-    eight = build_apertures(
-        StimulusConfig(resolution=RESOLUTION, n_steps=20), "bar"
-    ).as_float()
+    eight = build_apertures(StimulusConfig(resolution=RESOLUTION, n_steps=20), "bar").as_float()
     fitter = PRFFitter(grid, eight, fit_config)
 
     assert fitter.n_frames == 160
