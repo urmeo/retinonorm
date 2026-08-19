@@ -48,6 +48,11 @@ ignore = ["N803", "N806"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ARG"]
+# from_dict resolves these annotations with get_type_hints, which *evaluates* them, so the
+# future import does not make PEP 604 unions safe here. `X | None` raises TypeError on
+# Python 3.9, which this project still supports. PEP 585 builtin generics are fine: they
+# landed in 3.9.
+"src/cortexprobe/config.py" = ["UP007", "UP045"]
 
 [tool.mypy]
 python_version = "3.9"
