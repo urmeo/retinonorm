@@ -11,10 +11,10 @@ detail and `PLAN.md` governs intent.
 ## 0. Toolchain
 
 ```
-Python      3.12 (Homebrew), project-local .venv
+Python      >=3.9; CI runs 3.9 and 3.12, project-local .venv
 torch       >=2.2,<3        MPS backend on Apple silicon
 torchvision >=0.17,<1       frozen pretrained weights
-numpy       >=1.26,<3
+numpy       >=1.24,<3
 scipy       >=1.11,<2       least_squares (Levenberg–Marquardt / TRF)
 matplotlib  >=3.8,<4        figures only, never in library code paths
 ```
@@ -38,7 +38,9 @@ class StimulusConfig:
     n_steps: int  # frames per sweep direction
     bar_width_frac: float  # bar width as fraction of field
     directions: tuple[int, ...]  # degrees
-    carrier_seed: int
+    wedge_span_deg: float
+    ring_thickness_frac: float
+    max_fold_similarity: float  # largest tolerated held-out/training frame overlap
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,7 +72,13 @@ class RunConfig:
 equal digests must produce bit-identical stimuli.
 
 **Acceptance:** round-trip `RunConfig → JSON → RunConfig` is identity; digest stable across
-two interpreter sessions.
+two interpreter sessions. Both are covered by `tests/test_config.py`, along with every
+`__post_init__` guard.
+
+**Corrected during implementation.** `carrier_seed` is not in `StimulusConfig`. The carrier has
+no consumer until `models.py` provides a network to drive, and a configuration knob that
+controls nothing is the same unbacked claim this project forbids in prose. It arrives with the
+carrier.
 
 ---
 
@@ -82,18 +90,23 @@ Generates the aperture sequence used for both prediction and model input.
 def bar_apertures(cfg: StimulusConfig) -> np.ndarray:       # (T, H, W) bool
 def wedge_apertures(cfg: StimulusConfig) -> np.ndarray:
 def ring_apertures(cfg: StimulusConfig) -> np.ndarray:
-def carrier(cfg: StimulusConfig) -> np.ndarray:             # (T, H, W) float32 in [0,1]
+def carrier(cfg: StimulusConfig) -> np.ndarray:             # (T, H, W) float32 in [0,1]  -- with models.py
 def render(apertures, carrier) -> np.ndarray:               # (T, 3, H, W) float32, ImageNet-normalised
 ```
 
 Bar sweeps traverse the field edge-to-edge for each direction in `cfg.directions`. The carrier is
 a seeded binary noise pattern refreshed per frame — it drives the network without carrying
-retinotopic information itself.
+retinotopic information itself. It lands with `models.py`, when there is a network input for it
+to drive.
 
 **Invariants**
 - `apertures.dtype == bool`; no frame is entirely empty.
 - Every lit pixel lies inside the circular field mask.
-- Each generator's declared `n_frames` equals the frames it actually produces.
+- Each generator's declared `n_frames` is the count *before* leakage pruning; `build` may return
+  fewer, and `ApertureSequence.n_frames` is what is actually presented.
+- No frame assigned to one cross-validation group is bit-identical to a frame in another, and
+  none exceeds `cfg.max_fold_similarity` cosine overlap with one. Asserted for every design and
+  for the **default** configuration, in `tests/test_stimuli.py`.
 - `render` output is finite and matches torchvision ImageNet normalisation.
 - Same `carrier_seed` ⇒ bit-identical carrier.
 
@@ -309,6 +322,8 @@ A milestone is complete only when all hold:
 3. `pytest` passes; branch coverage ≥ 85% on `src/cortexprobe/`.
 4. The ground-truth recovery test (§6) passes.
 5. No number appears in any `.md` that was not produced by a run recorded in `results/`.
+   Enforced by `scripts/generate_validation_report.py --check` in CI, which re-measures every
+   quoted figure and confirms the committed tables were rendered from it.
 6. Commit message is a short human phrase, one concern per commit.
 
 ---
@@ -319,8 +334,9 @@ Strictly bottom-up; each step is testable before the next begins.
 
 ```
  1. scaffold: pyproject, ruff, mypy, pytest, CI, MIT license, .gitignore
- 2. config.py            + tests   → commit "add config"
- 3. stimuli.py           + tests   → commits "bar apertures", "wedge and ring", "stimulus tests"
+ 2. config.py            + tests   → commits "add config", "add config tests"
+ 3. stimuli.py           + tests   → commits "bar apertures", "wedge and ring",
+                                     "add stimulus leakage invariant tests"
  4. prf/model.py         + tests   → commit "gaussian prf model"
  5. prf/fit.py           + RECOVERY TEST → commits "grid search init", "nonlinear refine", "recovery test"
  6. prf/result.py        + tests   → commit "prf result io"
