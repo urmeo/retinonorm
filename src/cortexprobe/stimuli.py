@@ -12,11 +12,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .arrays import BoolArray, FloatArray
 from .config import ConfigError, StimulusConfig
 from .geometry import Grid
-
-BoolArray = np.ndarray
-FloatArray = np.ndarray
 
 
 def frame_similarity(stack: BoolArray) -> FloatArray:
@@ -29,7 +27,8 @@ def frame_similarity(stack: BoolArray) -> FloatArray:
     norms = np.linalg.norm(flat, axis=1)
     norms[norms == 0.0] = 1.0
     unit = flat / norms[:, None]
-    return unit @ unit.T
+    similarity: FloatArray = unit @ unit.T
+    return similarity
 
 
 def _prune_leaking_frames(stack: BoolArray, groups: np.ndarray, threshold: float) -> np.ndarray:
@@ -82,7 +81,8 @@ class ApertureSequence:
     @property
     def coverage(self) -> FloatArray:
         """Fraction of the field exposed in each frame."""
-        return self.apertures.mean(axis=(1, 2))
+        exposed: FloatArray = self.apertures.mean(axis=(1, 2))
+        return exposed
 
     def as_float(self) -> FloatArray:
         return self.apertures.astype(np.float64)

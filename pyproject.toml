@@ -55,7 +55,9 @@ ignore = ["N803", "N806"]
 "src/cortexprobe/config.py" = ["UP007", "UP045"]
 
 [tool.mypy]
-python_version = "3.9"
+# No python_version pin: mypy takes it from the interpreter, so the 3.9 and 3.12 CI jobs each
+# check their own semantics against the numpy stubs actually installed there. Pinning 3.9 made
+# mypy fail to parse modern numpy stubs, which use syntax newer than the pinned version.
 files = ["src"]
 strict = true
 warn_unreachable = true

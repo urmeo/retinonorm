@@ -16,9 +16,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from ..arrays import FloatArray
 from ..geometry import Grid
-
-FloatArray = np.ndarray
 
 
 class ReceptiveField(ABC):
@@ -72,7 +71,10 @@ class GaussianReceptiveField(ReceptiveField):
         dx = grid.x - self.x0
         dy = grid.y - self.y0
         variance = self.sigma**2
-        return np.exp(-(dx**2 + dy**2) / (2.0 * variance)) / (2.0 * np.pi * variance)
+        weights: FloatArray = np.exp(-(dx**2 + dy**2) / (2.0 * variance)) / (
+            2.0 * np.pi * variance
+        )
+        return weights
 
 
 def predict(weights: FloatArray, apertures: FloatArray) -> FloatArray:
