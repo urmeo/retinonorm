@@ -33,7 +33,14 @@ BOUND_TOLERANCE = 1e-3
 
 @dataclass(frozen=True)
 class UnitFit:
-    """The fitted pRF for one unit, with the uncertainty of its parameters."""
+    """The fitted pRF for one unit, with the uncertainty of its parameters.
+
+    ``converged`` and :attr:`accepted` answer different questions and must not be conflated.
+    ``converged`` is the optimiser's own report: did the search terminate successfully?
+    :attr:`accepted` is the scientific question: should this unit be reported as a pRF at all?
+    A fit can converge cleanly onto an answer that explains almost no variance, and a rejected
+    unit is not evidence that the numerics failed.
+    """
 
     x0: float
     y0: float
@@ -46,8 +53,13 @@ class UnitFit:
     se_x0: float = float("nan")
     se_y0: float = float("nan")
     se_sigma: float = float("nan")
-    at_bound: bool = False
+    x0_at_bound: bool = False
+    y0_at_bound: bool = False
+    sigma_at_bound: bool = False
     dof: int = 0
+    r2_threshold: float = float("inf")
+    """Variance the fit must explain to be accepted. Defaults to a threshold nothing clears,
+    so a fit assembled without one is never mistaken for an accepted pRF."""
 
     @classmethod
     def failed(cls) -> UnitFit:
@@ -58,6 +70,23 @@ class UnitFit:
     @property
     def eccentricity(self) -> float:
         return float(np.hypot(self.x0, self.y0))
+
+    @property
+    def at_bound(self) -> bool:
+        """Whether any fitted parameter is pinned against its search bound."""
+        return self.x0_at_bound or self.y0_at_bound or self.sigma_at_bound
+
+    @property
+    def accepted(self) -> bool:
+        """Whether this unit should be reported as a measured pRF.
+
+        A pRF sitting at the edge of the visual field is a real measurement -- receptive
+        fields do lie near the field boundary -- so ``x0`` or ``y0`` at a bound is not
+        disqualifying. A sigma pinned against the search ceiling is different: it says the
+        true size lies outside the range that was searched, so the reported value records
+        where the search stopped rather than what the data support.
+        """
+        return self.converged and self.r2 >= self.r2_threshold and not self.sigma_at_bound
 
     def confidence_interval(self, parameter: str, level: float = 0.95) -> Tuple[float, float]:
         """Two-sided interval for one parameter from the linearised covariance.
@@ -165,13 +194,14 @@ class PRFFitter:
             raise ValueError("candidate grid is empty; check grid_size and sigma_bounds")
         return candidates
 
-    def _is_at_bound(self, x0: float, y0: float, sigma: float) -> bool:
+    def _bounds_hit(self, x0: float, y0: float, sigma: float) -> Tuple[bool, bool, bool]:
+        """Which of the three searched parameters came to rest against a search bound."""
         lower, upper = self.bounds
-        values = (x0, y0, sigma)
-        return any(
+        pinned = [
             abs(value - low) <= BOUND_TOLERANCE or abs(value - high) <= BOUND_TOLERANCE
-            for value, low, high in zip(values, lower, upper)
-        )
+            for value, low, high in zip((x0, y0, sigma), lower, upper)
+        ]
+        return pinned[0], pinned[1], pinned[2]
 
     def _coarse_search(self, response: FloatArray) -> GaussianReceptiveField:
         best_index, best_r2 = 0, -np.inf
@@ -214,6 +244,7 @@ class PRFFitter:
         )
         score = _r_squared(response, fitted)
         se_x0, se_y0, se_sigma = _standard_errors(solution.jac, float(solution.cost), self.n_frames)
+        x0_at_bound, y0_at_bound, sigma_at_bound = self._bounds_hit(x0, y0, sigma)
 
         return UnitFit(
             x0=x0,
@@ -222,13 +253,16 @@ class PRFFitter:
             beta=float(coefficients[0]),
             baseline=float(coefficients[1]),
             r2=score,
-            converged=bool(solution.success) and score >= self.config.r2_threshold,
+            converged=bool(solution.success),
             n_fev=int(solution.nfev),
             se_x0=se_x0,
             se_y0=se_y0,
             se_sigma=se_sigma,
-            at_bound=self._is_at_bound(x0, y0, sigma),
+            x0_at_bound=x0_at_bound,
+            y0_at_bound=y0_at_bound,
+            sigma_at_bound=sigma_at_bound,
             dof=self.n_frames - N_PARAMETERS,
+            r2_threshold=self.config.r2_threshold,
         )
 
     def fit_all(self, activations: FloatArray) -> List[UnitFit]:
