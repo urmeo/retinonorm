@@ -172,3 +172,25 @@ def test_a_fit_without_a_threshold_is_never_accepted() -> None:
 
     assert fit.converged
     assert not fit.accepted
+
+
+def test_a_suppressed_unit_is_not_accepted_as_a_prf(fitter, grid, apertures) -> None:
+    """A response that falls where the aperture covers is suppression, not a receptive field.
+
+    The amplitude is solved by unconstrained least squares, so this fits perfectly with a
+    negative beta at exactly the right location. Only the sign distinguishes it.
+    """
+    driven = synthesise(grid, apertures, (12.0, 8.0, 5.0), beta=3.0, baseline=0.5)
+    suppressed = synthesise(grid, apertures, (12.0, 8.0, 5.0), beta=-3.0, baseline=10.0)
+
+    driven_fit = fitter.fit_unit(driven)
+    suppressed_fit = fitter.fit_unit(suppressed)
+
+    assert suppressed_fit.beta < 0.0
+    assert suppressed_fit.r2 > 0.99
+    assert suppressed_fit.converged
+    assert not suppressed_fit.accepted
+
+    assert driven_fit.beta > 0.0
+    assert driven_fit.accepted
+    assert np.hypot(driven_fit.x0 - 12.0, driven_fit.y0 - 8.0) < 0.5
