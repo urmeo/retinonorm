@@ -54,8 +54,9 @@ class ConfigBase:
 class StimulusConfig(ConfigBase):
     """Retinotopic mapping stimulus.
 
-    A bar aperture sweeps the visual field once per entry in ``directions``, exposing a noise
-    carrier that drives the network without itself carrying retinotopic structure.
+    A bar aperture sweeps the visual field once per entry in ``directions``. The noise carrier
+    that will fill the aperture arrives with ``models.py``, when there is a network input for
+    it to drive; it is not configured here until then.
 
     ``max_fold_similarity`` is the largest cosine overlap tolerated between a held-out frame
     and any training frame. Frames that exceed it across a fold boundary are dropped when the
@@ -69,7 +70,6 @@ class StimulusConfig(ConfigBase):
     directions: Tuple[int, ...] = (0, 45, 90, 135, 180, 225, 270, 315)
     wedge_span_deg: float = 45.0
     ring_thickness_frac: float = 0.125
-    carrier_seed: int = 0
     max_fold_similarity: float = 0.75
 
     def __post_init__(self) -> None:
