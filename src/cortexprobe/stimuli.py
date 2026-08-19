@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Tuple
 
 import numpy as np
 
@@ -130,7 +129,7 @@ class ApertureGenerator(ABC):
         """
 
     @abstractmethod
-    def _frames(self) -> Tuple[List[BoolArray], List[int], List[int]]:
+    def _frames(self) -> tuple[list[BoolArray], list[int], list[int]]:
         """Return the unmasked frames, their labels, and their cross-validation groups.
 
         Frames within a group are strongly overlapping and must never be split across a
@@ -157,14 +156,14 @@ class BarSweep(ApertureGenerator):
     def n_frames(self) -> int:
         return self.config.n_bar_frames
 
-    def _frames(self) -> Tuple[List[BoolArray], List[int], List[int]]:
+    def _frames(self) -> tuple[list[BoolArray], list[int], list[int]]:
         grid = self.grid
         half_width = self.config.bar_width_px / 2.0
         travel = np.linspace(-grid.radius, grid.radius, self.config.n_steps)
 
-        frames: List[BoolArray] = []
-        labels: List[int] = []
-        groups: List[int] = []
+        frames: list[BoolArray] = []
+        labels: list[int] = []
+        groups: list[int] = []
         for direction in self.config.directions:
             theta = np.radians(direction)
             projection = grid.x * np.cos(theta) + grid.y * np.sin(theta)
@@ -184,14 +183,14 @@ class RotatingWedge(ApertureGenerator):
     def n_frames(self) -> int:
         return self.config.n_steps
 
-    def _frames(self) -> Tuple[List[BoolArray], List[int], List[int]]:
+    def _frames(self) -> tuple[list[BoolArray], list[int], list[int]]:
         grid = self.grid
         span = self.config.wedge_span_deg
         starts = np.linspace(0.0, 360.0, self.config.n_steps, endpoint=False)
 
-        frames: List[BoolArray] = []
-        labels: List[int] = []
-        groups: List[int] = []
+        frames: list[BoolArray] = []
+        labels: list[int] = []
+        groups: list[int] = []
         for step, start in enumerate(starts):
             delta = (grid.polar_angle - start) % 360.0
             frames.append(delta <= span)
@@ -209,15 +208,15 @@ class ExpandingRing(ApertureGenerator):
     def n_frames(self) -> int:
         return self.config.n_steps
 
-    def _frames(self) -> Tuple[List[BoolArray], List[int], List[int]]:
+    def _frames(self) -> tuple[list[BoolArray], list[int], list[int]]:
         grid = self.grid
         thickness = self.config.ring_thickness_px
         centres = np.linspace(0.0, grid.radius, self.config.n_steps)
 
         block = max(1, self.config.n_steps // 4)
-        frames: List[BoolArray] = []
-        labels: List[int] = []
-        groups: List[int] = []
+        frames: list[BoolArray] = []
+        labels: list[int] = []
+        groups: list[int] = []
         for step, centre in enumerate(centres):
             frames.append(np.abs(grid.eccentricity - centre) <= thickness / 2.0)
             labels.append(step)

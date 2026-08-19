@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import time
-from typing import List, Tuple
 
 import numpy as np
 
@@ -39,7 +38,7 @@ def make_units(grid: Grid, apertures: np.ndarray, n_units: int, seed: int = 0) -
     return np.column_stack(columns)
 
 
-def time_call(function, *args) -> Tuple[float, object]:
+def time_call(function, *args) -> tuple[float, object]:
     start = time.perf_counter()
     result = function(*args)
     return time.perf_counter() - start, result
@@ -63,7 +62,7 @@ def main() -> None:
     print(f"grid {arguments.resolution}px | {fitter.n_frames} frames | "
           f"{len(fitter.candidates)} candidates | setup {setup * 1000:.0f} ms\n")
 
-    counts: List[int] = [n for n in UNIT_COUNTS if n <= arguments.max_units]
+    counts: list[int] = [n for n in UNIT_COUNTS if n <= arguments.max_units]
     print(f"{'units':>6} {'fit (s)':>9} {'per unit (ms)':>14} {'cv (s)':>9} {'cv per unit (ms)':>17} {'cv factor':>10}")
     print("-" * 70)
 

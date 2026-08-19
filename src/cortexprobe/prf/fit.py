@@ -11,8 +11,8 @@ form by linear least squares, so the nonlinear optimiser only ever explores thre
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import List, Sequence, Tuple
 
 import numpy as np
 from scipy.optimize import least_squares
@@ -119,7 +119,7 @@ class UnitFit:
             and not self.sigma_at_bound
         )
 
-    def confidence_interval(self, parameter: str, level: float = 0.95) -> Tuple[float, float]:
+    def confidence_interval(self, parameter: str, level: float = 0.95) -> tuple[float, float]:
         """Two-sided interval for one parameter from the linearised covariance.
 
         The interval assumes the residuals are approximately Gaussian and the model is locally
@@ -136,7 +136,7 @@ class UnitFit:
         return estimate - critical * error, estimate + critical * error
 
 
-def _solve_amplitude(prediction: FloatArray, response: FloatArray) -> Tuple[FloatArray, FloatArray]:
+def _solve_amplitude(prediction: FloatArray, response: FloatArray) -> tuple[FloatArray, FloatArray]:
     """Least-squares fit of ``response ~ beta * prediction + baseline``."""
     design = np.column_stack([prediction, np.ones_like(prediction)])
     coefficients, *_ = np.linalg.lstsq(design, response, rcond=None)
@@ -167,7 +167,7 @@ def _count_distinct_frames(apertures: FloatArray) -> int:
 
 def _standard_errors(
     jacobian: FloatArray, cost: float, n_independent: int
-) -> Tuple[float, float, float]:
+) -> tuple[float, float, float]:
     """Linearised standard errors from the Jacobian at the solution.
 
     ``cov = residual_variance * (J^T J)^-1`` is the usual Gauss-Newton approximation. The
@@ -250,13 +250,13 @@ class PRFFitter:
         return int(len(self.apertures))
 
     @property
-    def bounds(self) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+    def bounds(self) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
         """Search box: centres stay inside the field, sigma inside its configured range."""
         radius = self.grid.radius
         sigma_low, sigma_high = self.config.sigma_bounds
         return (-radius, -radius, sigma_low), (radius, radius, sigma_high)
 
-    def _build_candidates(self) -> List[GaussianReceptiveField]:
+    def _build_candidates(self) -> list[GaussianReceptiveField]:
         radius = self.grid.radius
         sigma_low, sigma_high = self.config.sigma_bounds
         n_sigma = max(3, self.config.grid_size // 2)
@@ -275,7 +275,7 @@ class PRFFitter:
             raise ValueError("candidate grid is empty; check grid_size and sigma_bounds")
         return candidates
 
-    def _bounds_hit(self, x0: float, y0: float, sigma: float) -> Tuple[bool, bool, bool]:
+    def _bounds_hit(self, x0: float, y0: float, sigma: float) -> tuple[bool, bool, bool]:
         """Which of the three searched parameters came to rest against a search bound."""
         lower, upper = self.bounds
         pinned = [
@@ -371,7 +371,7 @@ class PRFFitter:
             r2_threshold=self.config.r2_threshold,
         )
 
-    def fit_all(self, activations: FloatArray) -> List[UnitFit]:
+    def fit_all(self, activations: FloatArray) -> list[UnitFit]:
         """Fit every unit in a ``(frames, units)`` activation matrix."""
         activations = np.asarray(activations, dtype=np.float64)
         if activations.ndim != 2:

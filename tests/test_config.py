@@ -20,7 +20,6 @@ from cortexprobe.config import (
     StimulusConfig,
 )
 
-
 # --- stimulus guards ------------------------------------------------------------------------
 
 
