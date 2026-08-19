@@ -28,6 +28,7 @@ class ApertureSequence:
     grid: Grid
     kind: str
     frame_index: np.ndarray
+    group: np.ndarray
 
     def __post_init__(self) -> None:
         if self.apertures.dtype != np.bool_:
@@ -36,6 +37,8 @@ class ApertureSequence:
             raise ValueError("aperture frames must match the grid")
         if len(self.frame_index) != len(self.apertures):
             raise ValueError("frame_index must label every frame")
+        if len(self.group) != len(self.apertures):
+            raise ValueError("group must label every frame")
 
     @property
     def n_frames(self) -> int:
@@ -60,13 +63,14 @@ class ApertureGenerator(ABC):
         self.grid = Grid(config.resolution)
 
     def build(self) -> ApertureSequence:
-        frames, labels = self._frames()
+        frames, labels, groups = self._frames()
         stack = np.stack(frames) & self.grid.field_mask
         return ApertureSequence(
             apertures=stack,
             grid=self.grid,
             kind=self.kind,
             frame_index=np.asarray(labels),
+            group=np.asarray(groups),
         )
 
     @property
@@ -75,8 +79,12 @@ class ApertureGenerator(ABC):
         """Frame count this generator will produce."""
 
     @abstractmethod
-    def _frames(self) -> Tuple[List[BoolArray], List[int]]:
-        """Return the unmasked frames and their sweep labels."""
+    def _frames(self) -> Tuple[List[BoolArray], List[int], List[int]]:
+        """Return the unmasked frames, their labels, and their cross-validation groups.
+
+        Frames within a group are strongly overlapping and must never be split across a
+        train/test boundary. Groups are the smallest unit a fold may contain.
+        """
 
 
 class BarSweep(ApertureGenerator):
@@ -88,20 +96,22 @@ class BarSweep(ApertureGenerator):
     def n_frames(self) -> int:
         return self.config.n_bar_frames
 
-    def _frames(self) -> Tuple[List[BoolArray], List[int]]:
+    def _frames(self) -> Tuple[List[BoolArray], List[int], List[int]]:
         grid = self.grid
         half_width = self.config.bar_width_px / 2.0
         travel = np.linspace(-grid.radius, grid.radius, self.config.n_steps)
 
         frames: List[BoolArray] = []
         labels: List[int] = []
+        groups: List[int] = []
         for direction in self.config.directions:
             theta = np.radians(direction)
             projection = grid.x * np.cos(theta) + grid.y * np.sin(theta)
             for step, offset in enumerate(travel):
                 frames.append(np.abs(projection - offset) <= half_width)
                 labels.append(direction * 1000 + step)
-        return frames, labels
+                groups.append(direction)
+        return frames, labels, groups
 
 
 class RotatingWedge(ApertureGenerator):
@@ -113,18 +123,20 @@ class RotatingWedge(ApertureGenerator):
     def n_frames(self) -> int:
         return self.config.n_steps
 
-    def _frames(self) -> Tuple[List[BoolArray], List[int]]:
+    def _frames(self) -> Tuple[List[BoolArray], List[int], List[int]]:
         grid = self.grid
         span = self.config.wedge_span_deg
         starts = np.linspace(0.0, 360.0, self.config.n_steps, endpoint=False)
 
         frames: List[BoolArray] = []
         labels: List[int] = []
+        groups: List[int] = []
         for step, start in enumerate(starts):
             delta = (grid.polar_angle - start) % 360.0
             frames.append(delta <= span)
             labels.append(step)
-        return frames, labels
+            groups.append(int(start // 90.0))
+        return frames, labels, groups
 
 
 class ExpandingRing(ApertureGenerator):
@@ -136,17 +148,20 @@ class ExpandingRing(ApertureGenerator):
     def n_frames(self) -> int:
         return self.config.n_steps
 
-    def _frames(self) -> Tuple[List[BoolArray], List[int]]:
+    def _frames(self) -> Tuple[List[BoolArray], List[int], List[int]]:
         grid = self.grid
         thickness = self.config.ring_thickness_px
         centres = np.linspace(0.0, grid.radius, self.config.n_steps)
 
+        block = max(1, self.config.n_steps // 4)
         frames: List[BoolArray] = []
         labels: List[int] = []
+        groups: List[int] = []
         for step, centre in enumerate(centres):
             frames.append(np.abs(grid.eccentricity - centre) <= thickness / 2.0)
             labels.append(step)
-        return frames, labels
+            groups.append(step // block)
+        return frames, labels, groups
 
 
 class CarrierPattern:
