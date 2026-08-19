@@ -32,7 +32,7 @@ def make_units(grid: Grid, apertures: np.ndarray, n_units: int, seed: int = 0) -
     columns = []
     for _ in range(n_units):
         x0, y0 = rng.uniform(-radius, radius, size=2)
-        sigma = rng.uniform(3.0, 10.0)
+        sigma = rng.uniform(3.0, 8.0)
         clean = predict(GaussianReceptiveField(x0, y0, sigma).weights(grid), apertures)
         columns.append(clean + rng.normal(0.0, 0.2 * clean.std(), size=clean.shape))
     return np.column_stack(columns)
