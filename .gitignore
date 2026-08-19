@@ -10,6 +10,8 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
-results/
+results/*
 !results/.gitkeep
+!results/*.json
+!results/*.md
 .DS_Store
