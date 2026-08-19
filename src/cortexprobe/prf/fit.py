@@ -69,10 +69,14 @@ class UnitFit:
     it. Multi-peaked spatial tuning is common in the deeper layers this project intends to
     tap, so a misspecified fit there would be a plausible-looking wrong pRF.
 
-    Measured on a four-direction bar sweep at 64 px, a genuine single-Gaussian unit stays
-    under 0.03 from noiseless to 80 per cent noise, pure noise reaches 0.06, and a two-lobe
-    unit scores 0.29 to 0.44. It is reported rather than enforced: acceptance does not depend
-    on it, so downstream analysis chooses its own cut and states it.
+    Measured on a four-direction bar sweep at 64 px, across noise from 0 to 80 per cent: a
+    genuine single-Gaussian unit stays in 0.000-0.023, pure noise reaches 0.056, and two-lobe
+    units span 0.206-0.473. The separation is wide at low noise and narrows at high noise --
+    the weakest two-lobe case is only about four times the pure-noise level -- so a fixed cut
+    near 0.1 separates them here but should not be assumed to transfer.
+
+    It is reported rather than enforced: acceptance does not depend on it, so downstream
+    analysis chooses its own cut and states it.
     """
     x0_at_bound: bool = False
     y0_at_bound: bool = False

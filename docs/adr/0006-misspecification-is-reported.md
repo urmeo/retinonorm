@@ -24,9 +24,19 @@ It is reported, not enforced. Acceptance does not depend on it.
 
 ## Consequences
 
-Measured separation on a four-direction bar sweep at 64 px: genuine single-Gaussian units stay
-under 0.03 from noiseless to 80 % noise, pure noise reaches 0.06, two-lobe units score 0.29 to
-0.44 — an order of magnitude apart.
+Measured separation on a four-direction bar sweep at 64 px, over noise from 0 to 80 %, and over
+two lobe geometries (`x = ±14, σ = 3` and `(±16, ±10), σ = 3`):
+
+| Unit | `second_field_r2` |
+|---|---|
+| single Gaussian | 0.000 – 0.023 |
+| pure noise | 0.056 |
+| two lobes | 0.206 – 0.473 |
+
+The separation is widest at low noise and narrows as noise grows: the weakest two-lobe case
+(80 % noise, closer lobes) scores 0.206, only about four times the pure-noise level, while the
+strongest scores 0.473. A cut near 0.1 separates them in this configuration. That number is not
+claimed to transfer to a different stimulus, resolution, or lobe geometry.
 
 A naive alternative was rejected: correlating the residual against candidate predictions without
 weighting by remaining variance. That scores 0.925 on a *perfect* noiseless fit, because a
