@@ -18,7 +18,7 @@ import numpy as np
 from scipy.optimize import least_squares
 from scipy.stats import t as student_t
 
-from ..config import FitConfig
+from ..config import ConfigError, FitConfig
 from ..geometry import Grid
 from .model import GaussianReceptiveField, predict
 
@@ -29,6 +29,12 @@ N_PARAMETERS = 5
 
 # A fitted value this close to its search bound is reported as pinned rather than estimated.
 BOUND_TOLERANCE = 1e-3
+
+# Fraction of its unit volume a Gaussian must retain inside the sampled field for its overlap
+# with an aperture to be a measurement rather than an artefact of truncation. 99 per cent of a
+# Gaussian lies within +/- 3 sigma, and the field radius is resolution / 2, so this is met while
+# sigma stays under about resolution / 6.
+MIN_ON_GRID_VOLUME = 0.99
 
 
 @dataclass(frozen=True)
@@ -191,11 +197,40 @@ class PRFFitter:
         self.grid = grid
         self.apertures = apertures.astype(np.float64, copy=False)
         self.config = config
+        self._check_sigma_ceiling()
         self.n_independent_frames = _count_distinct_frames(self.apertures)
         self.candidates = self._build_candidates()
         self._predictions = np.column_stack(
             [predict(candidate.weights(grid), self.apertures) for candidate in self.candidates]
         )
+
+    def _check_sigma_ceiling(self) -> None:
+        """Reject a sigma ceiling this grid cannot represent.
+
+        :class:`~cortexprobe.config.FitConfig` already refuses a lower bound under one pixel,
+        because a Gaussian narrower than the pixel pitch is under-sampled and silently loses
+        its unit volume. The same failure occurs at the other end of the range, by truncation
+        rather than under-sampling, and it is the more dangerous of the two: the missing
+        volume grows with sigma, so the bias runs against large pRFs. That is precisely the
+        axis along which pRF size is compared across depth, so an unguarded ceiling would
+        push a headline result in a consistent direction for a reason that is pure geometry.
+
+        Only the fitter can make this check. The bound comes from the fit configuration and
+        the field size from the grid, and neither knows about the other on its own.
+        """
+        _, sigma_high = self.config.sigma_bounds
+        weights = GaussianReceptiveField(0.0, 0.0, sigma_high).weights(self.grid)
+        volume = float(weights[self.grid.field_mask].sum())
+        if volume < MIN_ON_GRID_VOLUME:
+            raise ConfigError(
+                f"upper sigma bound {sigma_high:g} px keeps only {volume:.3f} of its unit "
+                f"volume inside a {self.grid.resolution} px field, under the "
+                f"{MIN_ON_GRID_VOLUME} tolerance. A Gaussian this wide relative to the field "
+                "is truncated, so its overlap with an aperture understates the true value by "
+                "an amount that grows with sigma. Lower the bound to about "
+                f"{self.grid.resolution // 6} px, or raise the grid resolution to about "
+                f"{int(sigma_high * 6)} px."
+            )
 
     @property
     def n_frames(self) -> int:

@@ -40,7 +40,7 @@ def apertures(sequence: ApertureSequence) -> np.ndarray:
 
 @pytest.fixture(scope="session")
 def fit_config() -> FitConfig:
-    return FitConfig(grid_size=10, sigma_bounds=(1.0, 20.0))
+    return FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0))
 
 
 @pytest.fixture(scope="session")
