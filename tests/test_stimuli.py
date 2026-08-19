@@ -182,7 +182,7 @@ def test_coverage_is_a_fraction_of_the_field(small_config, kind) -> None:
     coverage = build_apertures(small_config, kind).coverage
 
     assert coverage.shape == (build_apertures(small_config, kind).n_frames,)
-    assert ((0.0 < coverage) & (coverage < 1.0)).all()
+    assert ((coverage > 0.0) & (coverage < 1.0)).all()
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -211,7 +211,7 @@ def test_as_float_matches_the_boolean_stack(small_config) -> None:
 
 def test_sequence_rejects_non_boolean_apertures(grid) -> None:
     with pytest.raises(TypeError, match="boolean"):
-        ApertureSequence(np.ones((3,) + grid.shape), grid, "bar", np.arange(3), np.zeros(3))
+        ApertureSequence(np.ones((3, *grid.shape)), grid, "bar", np.arange(3), np.zeros(3))
 
 
 def test_sequence_rejects_frames_that_do_not_match_the_grid(grid) -> None:
@@ -220,7 +220,7 @@ def test_sequence_rejects_frames_that_do_not_match_the_grid(grid) -> None:
 
 
 def test_sequence_rejects_unlabelled_frames(grid) -> None:
-    stack = np.ones((3,) + grid.shape, dtype=bool)
+    stack = np.ones((3, *grid.shape), dtype=bool)
 
     with pytest.raises(ValueError, match="frame_index"):
         ApertureSequence(stack, grid, "bar", np.arange(2), np.zeros(3))

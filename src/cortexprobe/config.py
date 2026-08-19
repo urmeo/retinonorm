@@ -76,7 +76,9 @@ class StimulusConfig(ConfigBase):
         if self.resolution < 8:
             raise ConfigError("resolution must be at least 8 pixels")
         if self.resolution % 2:
-            raise ConfigError("resolution must be even to keep the field symmetric about the origin")
+            raise ConfigError(
+                "resolution must be even to keep the field symmetric about the origin"
+            )
         if self.n_steps < 2:
             raise ConfigError("n_steps must be at least 2")
         if not 0.0 < self.bar_width_frac < 1.0:

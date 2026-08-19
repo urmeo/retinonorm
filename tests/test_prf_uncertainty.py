@@ -56,13 +56,15 @@ def test_wider_confidence_level_gives_wider_interval(fitter, grid, apertures) ->
     narrow = fit.confidence_interval("x0", level=0.80)
     wide = fit.confidence_interval("x0", level=0.99)
 
-    assert wide[0] < narrow[0] and narrow[1] < wide[1]
+    assert wide[0] < narrow[0]
+    assert narrow[1] < wide[1]
 
 
 def test_failed_fit_reports_undefined_interval() -> None:
     low, high = UnitFit.failed().confidence_interval("x0")
 
-    assert np.isnan(low) and np.isnan(high)
+    assert np.isnan(low)
+    assert np.isnan(high)
 
 
 def test_invalid_confidence_level_raises(fitter, grid, apertures) -> None:

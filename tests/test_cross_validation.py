@@ -134,7 +134,9 @@ def test_the_autocorrelated_fixture_has_the_correlation_it_claims(apertures) -> 
     assert float(np.mean(lags)) == pytest.approx(1.0 - 1.0 / 3.0, abs=0.05)
 
 
-def test_held_out_score_uses_train_amplitude(validator, grid, apertures, sequence, fit_config) -> None:
+def test_held_out_score_uses_train_amplitude(
+    validator, grid, apertures, sequence, fit_config
+) -> None:
     """Re-solving amplitude on the test fold would leak; confirm it is not done."""
     response = synthesise(grid, apertures, TRUTH, noise=0.2, seed=3)
     train, test, fitter = validator._folds[0]

@@ -156,7 +156,16 @@ def test_a_centre_at_the_field_edge_is_still_accepted(grid, apertures) -> None:
 def test_at_bound_is_the_disjunction_of_the_three_flags() -> None:
     from cortexprobe.prf.fit import UnitFit
 
-    base = dict(x0=0.0, y0=0.0, sigma=1.0, beta=1.0, baseline=0.0, r2=1.0, converged=True, n_fev=1)
+    base = {
+        "x0": 0.0,
+        "y0": 0.0,
+        "sigma": 1.0,
+        "beta": 1.0,
+        "baseline": 0.0,
+        "r2": 1.0,
+        "converged": True,
+        "n_fev": 1,
+    }
 
     assert not UnitFit(**base).at_bound
     assert UnitFit(**base, x0_at_bound=True).at_bound
@@ -338,7 +347,7 @@ def test_second_field_r2_of_a_constant_response_is_zero(fitter) -> None:
 def test_a_stimulus_with_no_distinguishable_frames_reports_no_second_field() -> None:
     """Every candidate prediction is constant, so none can explain any residual."""
     grid = Grid(32)
-    identical = np.ones((10,) + grid.shape)
+    identical = np.ones((10, *grid.shape))
     fitter = PRFFitter(grid, identical, FitConfig(grid_size=5, sigma_bounds=(1.0, 5.0)))
 
     assert fitter._second_field_r2(np.arange(10.0), np.zeros(10)) == 0.0

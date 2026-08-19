@@ -63,7 +63,8 @@ def synthesise(
     means the same signal-to-noise ratio regardless of pRF size or position.
     """
     x0, y0, sigma = truth
-    clean = beta * predict(GaussianReceptiveField(x0, y0, sigma).weights(grid), apertures) + baseline
+    weights = GaussianReceptiveField(x0, y0, sigma).weights(grid)
+    clean = beta * predict(weights, apertures) + baseline
     if noise <= 0.0:
         return clean
     rng = np.random.default_rng(seed)
