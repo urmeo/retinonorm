@@ -1,3 +1,3 @@
-from cortexprobe.config import RunConfig, StimulusConfig, ModelConfig, FitConfig, ConfigError
+from cortexprobe.config import ConfigError, FitConfig, ModelConfig, RunConfig, StimulusConfig
 
-__all__ = ["RunConfig", "StimulusConfig", "ModelConfig", "FitConfig", "ConfigError"]
+__all__ = ["ConfigError", "FitConfig", "ModelConfig", "RunConfig", "StimulusConfig"]

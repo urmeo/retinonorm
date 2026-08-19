@@ -88,7 +88,7 @@ def predict(weights: FloatArray, apertures: FloatArray) -> FloatArray:
     return apertures.reshape(len(apertures), -1) @ weights.ravel()
 
 
-def design_matrix(fields: "list[GaussianReceptiveField]", grid: Grid, apertures: FloatArray) -> FloatArray:
+def design_matrix(fields: list[GaussianReceptiveField], grid: Grid, apertures: FloatArray) -> FloatArray:
     """Stack predicted timecourses for a set of candidate fields, one column each.
 
     Used by the coarse grid search, which scores many candidates against the same activations.

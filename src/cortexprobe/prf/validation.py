@@ -13,8 +13,8 @@ for why a 180 degree return sweep is the same stimulus run backwards.
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from typing import Iterator, List, Sequence, Tuple
 
 import numpy as np
 
@@ -32,7 +32,7 @@ class CrossValidatedFit:
     """A pRF fitted on all frames, scored on frames it never saw."""
 
     fit: UnitFit
-    fold_r2: Tuple[float, ...]
+    fold_r2: tuple[float, ...]
 
     @property
     def cv_r2(self) -> float:
@@ -69,7 +69,7 @@ class LeaveOneGroupOut:
     def __len__(self) -> int:
         return int(len(self.unique))
 
-    def splits(self) -> Iterator[Tuple[IntArray, IntArray]]:
+    def splits(self) -> Iterator[tuple[IntArray, IntArray]]:
         for held_out in self.unique:
             test = np.flatnonzero(self.groups == held_out)
             train = np.flatnonzero(self.groups != held_out)
@@ -96,7 +96,7 @@ class CrossValidator:
         self.splitter = LeaveOneGroupOut(groups)
 
         self._full = PRFFitter(grid, self.apertures, config)
-        self._folds: List[Tuple[IntArray, IntArray, PRFFitter]] = []
+        self._folds: list[tuple[IntArray, IntArray, PRFFitter]] = []
         for train, test in self.splitter.splits():
             if len(train) <= N_PARAMETERS:
                 continue
@@ -108,7 +108,7 @@ class CrossValidator:
         response = np.asarray(response, dtype=np.float64)
         full_fit = self._full.fit_unit(response)
 
-        scores: List[float] = []
+        scores: list[float] = []
         for train, test, fitter in self._folds:
             train_fit = fitter.fit_unit(response[train])
             scores.append(self._score_held_out(train_fit, test, response))
@@ -127,7 +127,7 @@ class CrossValidator:
         fitted = train_fit.beta * prediction + train_fit.baseline
         return _r_squared(response[test], fitted)
 
-    def validate_all(self, activations: FloatArray) -> List[CrossValidatedFit]:
+    def validate_all(self, activations: FloatArray) -> list[CrossValidatedFit]:
         activations = np.asarray(activations, dtype=np.float64)
         if activations.ndim != 2:
             raise ValueError("activations must have shape (frames, units)")
