@@ -85,8 +85,20 @@ class UnitFit:
         disqualifying. A sigma pinned against the search ceiling is different: it says the
         true size lies outside the range that was searched, so the reported value records
         where the search stopped rather than what the data support.
+
+        A negative ``beta`` is disqualifying too. The amplitude is solved by unconstrained
+        least squares, so a unit whose response *falls* when the aperture covers a location
+        fits a perfect pRF there with the sign flipped. That is a suppressed unit, not a
+        receptive field, and surround suppression and normalisation both produce them in a
+        real network. Reported as an ordinary pRF it would contaminate every downstream
+        size-versus-depth regression and lesion contrast.
         """
-        return self.converged and self.r2 >= self.r2_threshold and not self.sigma_at_bound
+        return (
+            self.converged
+            and self.r2 >= self.r2_threshold
+            and self.beta > 0.0
+            and not self.sigma_at_bound
+        )
 
     def confidence_interval(self, parameter: str, level: float = 0.95) -> Tuple[float, float]:
         """Two-sided interval for one parameter from the linearised covariance.
