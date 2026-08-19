@@ -1,0 +1,86 @@
+"""Recovery across stimulus designs and noise levels.
+
+A fitter that only works for bar sweeps at one signal-to-noise ratio is not a measurement
+instrument. These tests sweep both axes and assert that accuracy degrades gracefully rather
+than collapsing, and that the fitter's own confidence tracks that degradation.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from cortexprobe.config import FitConfig, StimulusConfig
+from cortexprobe.geometry import Grid
+from cortexprobe.prf.fit import PRFFitter
+from cortexprobe.stimuli import build_apertures
+
+from .conftest import RESOLUTION, synthesise
+
+TRUTH = (10.0, -8.0, 5.0)
+NOISE_TOLERANCE = {0.0: 0.05, 0.1: 0.5, 0.2: 0.8, 0.4: 1.5, 0.8: 3.0}
+
+
+@pytest.mark.parametrize(("noise", "tolerance"), sorted(NOISE_TOLERANCE.items()))
+def test_position_error_stays_within_tolerance_as_noise_grows(
+    fitter, grid, apertures, noise, tolerance
+) -> None:
+    fit = fitter.fit_unit(synthesise(grid, apertures, TRUTH, noise=noise, seed=13))
+
+    assert np.hypot(fit.x0 - TRUTH[0], fit.y0 - TRUTH[1]) < tolerance
+
+
+def test_r2_decreases_monotonically_with_noise(fitter, grid, apertures) -> None:
+    scores = [
+        fitter.fit_unit(synthesise(grid, apertures, TRUTH, noise=noise, seed=13)).r2
+        for noise in (0.0, 0.2, 0.4, 0.8)
+    ]
+
+    assert scores == sorted(scores, reverse=True)
+
+
+@pytest.mark.parametrize("kind", ["bar", "wedge", "ring"])
+def test_fitter_runs_on_every_stimulus_design(kind) -> None:
+    config = StimulusConfig(resolution=RESOLUTION, n_steps=24, directions=(0, 45, 90, 135))
+    grid = Grid(RESOLUTION)
+    apertures = build_apertures(config, kind).as_float()
+    fitter = PRFFitter(grid, apertures, FitConfig(grid_size=8, sigma_bounds=(1.0, 20.0)))
+
+    fit = fitter.fit_unit(synthesise(grid, apertures, TRUTH))
+
+    assert np.isfinite([fit.x0, fit.y0, fit.sigma]).all()
+    assert fit.r2 > 0.9
+
+
+def test_bar_sweeps_localise_better_than_rings() -> None:
+    """An expanding ring constrains eccentricity but not polar angle, so position is weaker."""
+    config = StimulusConfig(resolution=RESOLUTION, n_steps=24, directions=(0, 45, 90, 135))
+    grid = Grid(RESOLUTION)
+    fit_config = FitConfig(grid_size=8, sigma_bounds=(1.0, 20.0))
+
+    errors = {}
+    for kind in ("bar", "ring"):
+        apertures = build_apertures(config, kind).as_float()
+        fitter = PRFFitter(grid, apertures, fit_config)
+        fit = fitter.fit_unit(synthesise(grid, apertures, TRUTH, noise=0.2, seed=17))
+        errors[kind] = np.hypot(fit.x0 - TRUTH[0], fit.y0 - TRUTH[1])
+
+    assert errors["bar"] < errors["ring"]
+
+
+@pytest.mark.parametrize("sigma", [2.0, 4.0, 8.0, 14.0])
+def test_recovery_across_receptive_field_sizes(fitter, grid, apertures, sigma) -> None:
+    fit = fitter.fit_unit(synthesise(grid, apertures, (6.0, 6.0, sigma)))
+
+    assert fit.converged
+    assert abs(fit.sigma - sigma) / sigma < 0.1
+
+
+def test_amplitude_scaling_does_not_change_geometry(fitter, grid, apertures) -> None:
+    """Doubling the response amplitude must not move the fitted pRF."""
+    weak = fitter.fit_unit(synthesise(grid, apertures, TRUTH, beta=1.0))
+    strong = fitter.fit_unit(synthesise(grid, apertures, TRUTH, beta=10.0))
+
+    assert weak.x0 == pytest.approx(strong.x0, abs=1e-6)
+    assert weak.sigma == pytest.approx(strong.sigma, abs=1e-6)
+    assert strong.beta > weak.beta
