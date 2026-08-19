@@ -132,14 +132,34 @@ def _r_squared(response: FloatArray, fitted: FloatArray) -> float:
     return 1.0 - residual / total
 
 
-def _standard_errors(jacobian: FloatArray, cost: float, n_frames: int) -> Tuple[float, float, float]:
+def _count_distinct_frames(apertures: FloatArray) -> int:
+    """Frames carrying information the rest do not.
+
+    A design can present the same aperture twice: without an haemodynamic response a bar
+    sweep and its 180 degree return are bit-identical, so the default eight-direction stimulus
+    shows every frame exactly twice. A duplicate contributes a second copy of its own residual
+    and its own Jacobian rows. Those copies cancel out of the fitted parameters but not out of
+    the degrees of freedom, so counting them would shrink every standard error as though a
+    genuinely independent observation had been made.
+    """
+    flat = apertures.reshape(len(apertures), -1)
+    return len({row.tobytes() for row in flat})
+
+
+def _standard_errors(
+    jacobian: FloatArray, cost: float, n_independent: int
+) -> Tuple[float, float, float]:
     """Linearised standard errors from the Jacobian at the solution.
 
     ``cov = residual_variance * (J^T J)^-1`` is the usual Gauss-Newton approximation. The
     pseudo-inverse is used because a pRF sitting outside the stimulated field can make
     ``J^T J`` singular, and that case should yield undefined errors rather than an exception.
+
+    ``n_independent`` counts distinct frames, while ``cost`` and ``jacobian`` still cover every
+    frame presented. With ``k`` copies of each frame both ``cost`` and ``J^T J`` scale by ``k``
+    and the factors cancel, leaving the covariance a duplicate-free stimulus would have given.
     """
-    dof = n_frames - N_PARAMETERS
+    dof = n_independent - N_PARAMETERS
     if dof <= 0:
         return (float("nan"),) * 3
     residual_variance = 2.0 * cost / dof
@@ -171,6 +191,7 @@ class PRFFitter:
         self.grid = grid
         self.apertures = apertures.astype(np.float64, copy=False)
         self.config = config
+        self.n_independent_frames = _count_distinct_frames(self.apertures)
         self.candidates = self._build_candidates()
         self._predictions = np.column_stack(
             [predict(candidate.weights(grid), self.apertures) for candidate in self.candidates]
@@ -255,7 +276,9 @@ class PRFFitter:
             predict(field.weights(self.grid), self.apertures), response
         )
         score = _r_squared(response, fitted)
-        se_x0, se_y0, se_sigma = _standard_errors(solution.jac, float(solution.cost), self.n_frames)
+        se_x0, se_y0, se_sigma = _standard_errors(
+            solution.jac, float(solution.cost), self.n_independent_frames
+        )
         x0_at_bound, y0_at_bound, sigma_at_bound = self._bounds_hit(x0, y0, sigma)
 
         return UnitFit(
@@ -273,7 +296,7 @@ class PRFFitter:
             x0_at_bound=x0_at_bound,
             y0_at_bound=y0_at_bound,
             sigma_at_bound=sigma_at_bound,
-            dof=self.n_frames - N_PARAMETERS,
+            dof=self.n_independent_frames - N_PARAMETERS,
             r2_threshold=self.config.r2_threshold,
         )
 
