@@ -25,8 +25,12 @@ def test_a_receptive_field_needs_a_positive_sigma() -> None:
 
 @pytest.mark.parametrize(
     ("x0", "y0", "eccentricity", "angle"),
-    [(3.0, 4.0, 5.0, 53.13010235), (0.0, 0.0, 0.0, 0.0), (-1.0, 0.0, 1.0, 180.0),
-     (0.0, -2.0, 2.0, 270.0)],
+    [
+        (3.0, 4.0, 5.0, 53.13010235),
+        (0.0, 0.0, 0.0, 0.0),
+        (-1.0, 0.0, 1.0, 180.0),
+        (0.0, -2.0, 2.0, 270.0),
+    ],
 )
 def test_position_is_reported_in_polar_coordinates_too(x0, y0, eccentricity, angle) -> None:
     field = GaussianReceptiveField(x0, y0, 3.0)

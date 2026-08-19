@@ -224,9 +224,7 @@ class ExpandingRing(ApertureGenerator):
         return frames, labels, groups
 
 
-GENERATORS = {
-    generator.kind: generator for generator in (BarSweep, RotatingWedge, ExpandingRing)
-}
+GENERATORS = {generator.kind: generator for generator in (BarSweep, RotatingWedge, ExpandingRing)}
 
 
 def build_apertures(config: StimulusConfig, kind: str = "bar") -> ApertureSequence:

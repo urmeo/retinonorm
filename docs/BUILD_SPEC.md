@@ -34,24 +34,27 @@ Frozen dataclasses. The only source of run truth; nothing reads loose kwargs.
 ```python
 @dataclass(frozen=True, slots=True)
 class StimulusConfig:
-    resolution: int          # square field, pixels
-    n_steps: int             # frames per sweep direction
-    bar_width_frac: float    # bar width as fraction of field
-    directions: tuple[int, ...]   # degrees
+    resolution: int  # square field, pixels
+    n_steps: int  # frames per sweep direction
+    bar_width_frac: float  # bar width as fraction of field
+    directions: tuple[int, ...]  # degrees
     carrier_seed: int
+
 
 @dataclass(frozen=True, slots=True)
 class ModelConfig:
-    name: str                # registry key
+    name: str  # registry key
     layers: tuple[str, ...]  # tap points
-    weights_seed: int | None # None = pretrained
+    weights_seed: int | None  # None = pretrained
+
 
 @dataclass(frozen=True, slots=True)
 class FitConfig:
-    grid_size: int           # coarse search resolution
+    grid_size: int  # coarse search resolution
     sigma_bounds: tuple[float, float]
     max_nfev: int
-    r2_threshold: float      # below this, unit is not reported as fitted
+    r2_threshold: float  # below this, unit is not reported as fitted
+
 
 @dataclass(frozen=True, slots=True)
 class RunConfig:
@@ -59,7 +62,8 @@ class RunConfig:
     model: ModelConfig
     fit: FitConfig
     seed: int
-    def digest(self) -> str: ...   # sha256 over canonical JSON
+
+    def digest(self) -> str: ...  # sha256 over canonical JSON
 ```
 
 **Invariant:** `RunConfig.digest()` is stable across processes and platforms. Two runs with

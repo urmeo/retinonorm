@@ -147,9 +147,7 @@ def test_optional_field_round_trips_as_none() -> None:
     assert ModelConfig.from_dict(json.loads(json.dumps(config.to_dict()))) == config
 
 
-@pytest.mark.parametrize(
-    "section", [StimulusConfig, ModelConfig, FitConfig, RunConfig]
-)
+@pytest.mark.parametrize("section", [StimulusConfig, ModelConfig, FitConfig, RunConfig])
 def test_unknown_keys_are_rejected(section) -> None:
     with pytest.raises(ConfigError, match="unknown keys"):
         section.from_dict({"nonsense": 1})

@@ -59,8 +59,10 @@ def main() -> None:
     fit_config = FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0))
 
     setup, fitter = time_call(PRFFitter, grid, apertures, fit_config)
-    print(f"grid {arguments.resolution}px | {fitter.n_frames} frames | "
-          f"{len(fitter.candidates)} candidates | setup {setup * 1000:.0f} ms\n")
+    print(
+        f"grid {arguments.resolution}px | {fitter.n_frames} frames | "
+        f"{len(fitter.candidates)} candidates | setup {setup * 1000:.0f} ms\n"
+    )
 
     counts: list[int] = [n for n in UNIT_COUNTS if n <= arguments.max_units]
     print(
