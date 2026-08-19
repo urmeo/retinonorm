@@ -80,3 +80,15 @@ def autocorrelated_noise(n_frames: int, width: int = 3, seed: int = 21) -> np.nd
     rng = np.random.default_rng(seed)
     kernel = np.ones(width) / width
     return np.convolve(rng.normal(size=n_frames), kernel, mode="same")
+
+
+@pytest.fixture(scope="session")
+def default_stimulus_config() -> StimulusConfig:
+    """The configuration a user gets with no overrides at all.
+
+    Every other fixture here pins a smaller, four-direction stimulus so the suite stays fast.
+    No four-direction set can contain a pair 180 degrees apart, so that config structurally
+    cannot exhibit the duplicate-sweep leak the shipped default once had -- which is exactly
+    why the default is fixtured separately and asserted against directly.
+    """
+    return StimulusConfig()

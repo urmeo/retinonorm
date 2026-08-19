@@ -104,11 +104,13 @@ class ApertureGenerator(ABC):
         group_array = np.asarray(groups)
 
         keep = _prune_leaking_frames(stack, group_array, self.config.max_fold_similarity)
-        if len(np.unique(group_array[keep])) < 2:
+        if len(np.unique(group_array)) >= 2 > len(np.unique(group_array[keep])):
             raise ConfigError(
-                f"{self.kind} apertures leave fewer than two cross-validation groups once frames "
-                f"overlapping above max_fold_similarity={self.config.max_fold_similarity} are "
-                "dropped; widen n_steps or raise the threshold"
+                f"{self.kind} apertures define "
+                f"{len(np.unique(group_array))} cross-validation groups but only "
+                f"{len(np.unique(group_array[keep]))} survive pruning at "
+                f"max_fold_similarity={self.config.max_fold_similarity}; raise the threshold or "
+                "increase n_steps so neighbouring frames overlap less"
             )
         return ApertureSequence(
             apertures=stack[keep],
@@ -221,23 +223,6 @@ class ExpandingRing(ApertureGenerator):
             labels.append(step)
             groups.append(step // block)
         return frames, labels, groups
-
-
-class CarrierPattern:
-    """Binary noise refreshed per frame.
-
-    The carrier gives the network something to respond to inside the aperture. It is
-    deliberately unstructured: any retinotopic signal recovered from the activations must come
-    from the aperture, not from the texture filling it.
-    """
-
-    def __init__(self, config: StimulusConfig) -> None:
-        self.config = config
-
-    def build(self, n_frames: int) -> FloatArray:
-        rng = np.random.default_rng(self.config.carrier_seed)
-        shape = (n_frames, self.config.resolution, self.config.resolution)
-        return rng.integers(0, 2, size=shape).astype(np.float64)
 
 
 GENERATORS = {
