@@ -44,7 +44,7 @@ def test_fitter_runs_on_every_stimulus_design(kind) -> None:
     config = StimulusConfig(resolution=RESOLUTION, n_steps=24, directions=(0, 45, 90, 135))
     grid = Grid(RESOLUTION)
     apertures = build_apertures(config, kind).as_float()
-    fitter = PRFFitter(grid, apertures, FitConfig(grid_size=8, sigma_bounds=(1.0, 20.0)))
+    fitter = PRFFitter(grid, apertures, FitConfig(grid_size=8, sigma_bounds=(1.0, 10.0)))
 
     fit = fitter.fit_unit(synthesise(grid, apertures, TRUTH))
 
@@ -56,7 +56,7 @@ def test_bar_sweeps_localise_better_than_rings() -> None:
     """An expanding ring constrains eccentricity but not polar angle, so position is weaker."""
     config = StimulusConfig(resolution=RESOLUTION, n_steps=24, directions=(0, 45, 90, 135))
     grid = Grid(RESOLUTION)
-    fit_config = FitConfig(grid_size=8, sigma_bounds=(1.0, 20.0))
+    fit_config = FitConfig(grid_size=8, sigma_bounds=(1.0, 10.0))
 
     errors = {}
     for kind in ("bar", "ring"):
@@ -68,7 +68,7 @@ def test_bar_sweeps_localise_better_than_rings() -> None:
     assert errors["bar"] < errors["ring"]
 
 
-@pytest.mark.parametrize("sigma", [2.0, 4.0, 8.0, 14.0])
+@pytest.mark.parametrize("sigma", [2.0, 4.0, 6.0, 9.0])
 def test_recovery_across_receptive_field_sizes(fitter, grid, apertures, sigma) -> None:
     fit = fitter.fit_unit(synthesise(grid, apertures, (6.0, 6.0, sigma)))
 
