@@ -72,7 +72,7 @@ def test_bar_sweeps_localise_better_than_rings() -> None:
 def test_recovery_across_receptive_field_sizes(fitter, grid, apertures, sigma) -> None:
     fit = fitter.fit_unit(synthesise(grid, apertures, (6.0, 6.0, sigma)))
 
-    assert fit.converged
+    assert fit.accepted
     assert abs(fit.sigma - sigma) / sigma < 0.1
 
 
