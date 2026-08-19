@@ -287,3 +287,75 @@ def test_a_perfect_fit_leaves_no_residual_structure(fitter, grid, apertures) -> 
 
 def test_unfittable_response_reports_no_second_field(fitter) -> None:
     assert np.isnan(UnitFit.failed().second_field_r2)
+
+
+# --- defensive paths ------------------------------------------------------------------------
+
+
+def test_r_squared_of_a_constant_response_is_zero() -> None:
+    from cortexprobe.prf.fit import _r_squared
+
+    constant = np.full(10, 3.0)
+
+    assert _r_squared(constant, constant) == 0.0
+
+
+def test_standard_errors_are_undefined_without_degrees_of_freedom() -> None:
+    from cortexprobe.prf.fit import _standard_errors
+
+    errors = _standard_errors(np.ones((3, 3)), 1.0, n_independent=3)
+
+    assert all(np.isnan(error) for error in errors)
+
+
+def test_standard_errors_are_undefined_when_the_cost_is_not_finite() -> None:
+    """Undefined errors are reported as undefined, never as a number."""
+    from cortexprobe.prf.fit import _standard_errors
+
+    with np.errstate(invalid="ignore"):
+        errors = _standard_errors(np.zeros((20, 3)), float("inf"), n_independent=20)
+
+    assert all(np.isnan(error) for error in errors)
+
+
+def test_fit_reports_eccentricity_of_the_fitted_centre(fitter, grid, apertures) -> None:
+    fit = fitter.fit_unit(synthesise(grid, apertures, (3.0, 4.0, 5.0)))
+
+    assert fit.eccentricity == pytest.approx(5.0, abs=0.5)
+
+
+def test_fit_all_rejects_a_non_matrix(fitter) -> None:
+    with pytest.raises(ValueError, match="frames, units"):
+        fitter.fit_all(np.zeros(fitter.n_frames))
+
+
+def test_second_field_r2_of_a_constant_response_is_zero(fitter) -> None:
+    constant = np.full(fitter.n_frames, 2.0)
+
+    assert fitter._second_field_r2(constant, constant) == 0.0
+
+
+def test_a_stimulus_with_no_distinguishable_frames_reports_no_second_field() -> None:
+    """Every candidate prediction is constant, so none can explain any residual."""
+    grid = Grid(32)
+    identical = np.ones((10,) + grid.shape)
+    fitter = PRFFitter(grid, identical, FitConfig(grid_size=5, sigma_bounds=(1.0, 5.0)))
+
+    assert fitter._second_field_r2(np.arange(10.0), np.zeros(10)) == 0.0
+
+
+def test_an_optimiser_failure_is_reported_as_an_unfitted_unit(
+    monkeypatch, fitter, grid, apertures
+) -> None:
+    """A pathological unit must not propagate a numerical exception to the caller."""
+    import cortexprobe.prf.fit as fit_module
+
+    def explode(*args, **kwargs):
+        raise np.linalg.LinAlgError("SVD did not converge")
+
+    monkeypatch.setattr(fit_module, "least_squares", explode)
+
+    fit = fitter.fit_unit(synthesise(grid, apertures, (12.0, 8.0, 5.0)))
+
+    assert not fit.accepted
+    assert np.isnan(fit.x0)
