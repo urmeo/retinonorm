@@ -62,11 +62,13 @@ class GaussianReceptiveField(ReceptiveField):
         the parameterisation instead of measured.
 
         The Gaussian is not truncated by this function, but the grid truncates it anyway: the
-        unit-volume property holds only while ``sigma`` is small relative to the field. Ninety
-        nine per cent of the volume lies within +/- 3 sigma, so it survives while sigma stays
-        under roughly ``resolution / 6``; on a 64 px grid a sigma of 20 retains 0.723 of it.
-        :class:`~cortexprobe.prf.fit.PRFFitter` refuses a sigma ceiling that breaches this,
-        because the shortfall grows with sigma and would bias size-versus-depth comparisons.
+        unit-volume property holds only while ``sigma`` is small relative to the field. The
+        radial mass of a 2-D Gaussian within 3 sigma is ``1 - exp(-4.5) = 0.9889``, just under
+        the 0.99 tolerance the fitter enforces, so unit volume survives only while sigma stays
+        under roughly ``resolution / 6.1`` -- see ``RESOLUTION_PER_SIGMA``. On a 64 px grid a
+        sigma of 20 retains 0.723 of it. :class:`~cortexprobe.prf.fit.PRFFitter` refuses a
+        sigma ceiling that breaches this, because the shortfall grows with sigma and would bias
+        size-versus-depth comparisons.
         """
         dx = grid.x - self.x0
         dy = grid.y - self.y0
@@ -93,6 +95,8 @@ def design_matrix(
 ) -> FloatArray:
     """Stack predicted timecourses for a set of candidate fields, one column each.
 
-    Used by the coarse grid search, which scores many candidates against the same activations.
+    Provided for callers that score many candidates against one set of activations.
+    :class:`~cortexprobe.prf.fit.PRFFitter` builds the equivalent stack inline in its
+    constructor, so that it can also keep the candidate list beside it.
     """
     return np.column_stack([predict(field.weights(grid), apertures) for field in fields])

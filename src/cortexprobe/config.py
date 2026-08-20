@@ -138,9 +138,9 @@ class FitConfig(ConfigBase):
     Both ends of ``sigma_bounds`` are constrained, for the same reason from opposite
     directions. The floor is checked here: below the pixel pitch a Gaussian is under-sampled.
     The ceiling depends on the field size and so is checked by
-    :class:`~cortexprobe.prf.fit.PRFFitter`, which knows the grid: much beyond
-    ``resolution / 6`` a Gaussian is truncated by the field edge. The default ceiling of 20 px
-    suits the default 128 px stimulus.
+    :class:`~cortexprobe.prf.fit.PRFFitter`, which knows the grid: at or beyond about
+    ``resolution / 6.1`` a Gaussian is truncated by the field edge. The default ceiling of 20 px
+    suits the default 128 px stimulus, whose limit is 20.9 px.
     """
 
     grid_size: int = 12

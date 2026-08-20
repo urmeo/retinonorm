@@ -444,6 +444,36 @@ def test_confidence_interval_accepts_every_fitted_parameter(
     assert low < getattr(fit, parameter) < high
 
 
+@pytest.mark.parametrize("resolution", [32, 64, 96, 128, 160, 200])
+def test_sigma_ceiling_advice_works_at_every_resolution(resolution) -> None:
+    """The 64 px fixture rounded down by luck; other grids rounded up and stayed rejected.
+
+    Both figures the message names must be usable: the sigma bound must clear the volume
+    tolerance, and the resolution must be even, since StimulusConfig rejects odd fields.
+    """
+    import re
+
+    from cortexprobe.config import ConfigError
+
+    wide = Grid(resolution)
+    apertures = np.zeros((20, *wide.shape))
+    over = resolution / 4.0
+    with pytest.raises(ConfigError) as raised:
+        PRFFitter(wide, apertures, FitConfig(grid_size=5, sigma_bounds=(1.0, over)))
+    message = str(raised.value)
+
+    advised_sigma = float(re.search(r"bound to about (\d+) px", message).group(1))
+    advised_resolution = int(re.search(r"resolution to about (\d+) px", message).group(1))
+
+    PRFFitter(wide, apertures, FitConfig(grid_size=5, sigma_bounds=(1.0, advised_sigma)))
+
+    assert advised_resolution % 2 == 0, "an odd resolution is rejected by StimulusConfig"
+    bigger = Grid(advised_resolution)
+    PRFFitter(
+        bigger, np.zeros((20, *bigger.shape)), FitConfig(grid_size=5, sigma_bounds=(1.0, over))
+    )
+
+
 def test_the_sigma_ceiling_error_gives_advice_that_works(grid) -> None:
     """An error that explains the fix must not suggest one that reproduces the error.
 

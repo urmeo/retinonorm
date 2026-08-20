@@ -108,8 +108,11 @@ class ApertureGenerator(ABC):
                 f"{self.kind} apertures define "
                 f"{len(np.unique(group_array))} cross-validation groups but only "
                 f"{len(np.unique(group_array[keep]))} survive pruning at "
-                f"max_fold_similarity={self.config.max_fold_similarity}; raise the threshold or "
-                "increase n_steps so neighbouring frames overlap less"
+                f"max_fold_similarity={self.config.max_fold_similarity}; raise the threshold, or "
+                "narrow the aperture (ring_thickness_frac, wedge_span_deg, bar_width_frac) so "
+                "frames in different groups share fewer pixels. Raising n_steps does not help: "
+                "it shortens the step while leaving the aperture as wide, so neighbouring frames "
+                "overlap more, not less"
             )
         return ApertureSequence(
             apertures=stack[keep],
