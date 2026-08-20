@@ -11,6 +11,7 @@ form by linear least squares, so the nonlinear optimiser only ever explores thre
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -33,10 +34,17 @@ FITTED_PARAMETERS = ("x0", "y0", "sigma")
 BOUND_TOLERANCE = 1e-3
 
 # Fraction of its unit volume a Gaussian must retain inside the sampled field for its overlap
-# with an aperture to be a measurement rather than an artefact of truncation. 99 per cent of a
-# Gaussian lies within +/- 3 sigma, and the field radius is resolution / 2, so this is met while
-# sigma stays under about resolution / 6.
+# with an aperture to be a measurement rather than an artefact of truncation.
+#
+# The radial mass of a 2-D Gaussian within 3 sigma is 1 - exp(-4.5) = 0.9889, which is *under*
+# this tolerance -- the familiar 99-per-cent-within-3-sigma figure is the one-dimensional one.
+# With the field radius at resolution / 2, the tolerance is met while sigma stays under about
+# resolution / 6.1. A sigma of exactly resolution / 6 is rejected, by a small margin.
 MIN_ON_GRID_VOLUME = 0.99
+
+# Ratio of field resolution to the largest sigma that still clears MIN_ON_GRID_VOLUME. Measured
+# on the grid rather than derived: 64/10.5, 128/21.0 and 256/42.0 all give 6.095.
+RESOLUTION_PER_SIGMA = 6.1
 
 
 @dataclass(frozen=True)
@@ -254,8 +262,8 @@ class PRFFitter:
                 f"{MIN_ON_GRID_VOLUME} tolerance. A Gaussian this wide relative to the field "
                 "is truncated, so its overlap with an aperture understates the true value by "
                 "an amount that grows with sigma. Lower the bound to about "
-                f"{self.grid.resolution // 6} px, or raise the grid resolution to about "
-                f"{int(sigma_high * 6)} px."
+                f"{self.grid.resolution / RESOLUTION_PER_SIGMA:.0f} px, or raise the grid "
+                f"resolution to about {math.ceil(sigma_high * RESOLUTION_PER_SIGMA)} px."
             )
 
     @property

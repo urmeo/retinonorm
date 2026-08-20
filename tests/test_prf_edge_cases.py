@@ -442,3 +442,47 @@ def test_confidence_interval_accepts_every_fitted_parameter(
     low, high = fit.confidence_interval(parameter)
 
     assert low < getattr(fit, parameter) < high
+
+
+def test_the_sigma_ceiling_error_gives_advice_that_works(grid) -> None:
+    """An error that explains the fix must not suggest one that reproduces the error.
+
+    An earlier message advised raising the resolution to `sigma * 6`, which was itself rejected:
+    the 2-D radial mass within 3 sigma is 0.9889, under the 0.99 tolerance, so the true ratio is
+    about 6.1 rather than 6.
+    """
+    import re
+
+    from cortexprobe.config import ConfigError
+
+    apertures = np.zeros((20, *grid.shape))
+    with pytest.raises(ConfigError) as raised:
+        PRFFitter(grid, apertures, FitConfig(grid_size=5, sigma_bounds=(1.0, 20.0)))
+    message = str(raised.value)
+
+    advised_sigma = float(re.search(r"bound to about (\d+) px", message).group(1))
+    advised_resolution = int(re.search(r"resolution to about (\d+) px", message).group(1))
+
+    # Both routes the message offers must actually construct.
+    PRFFitter(grid, apertures, FitConfig(grid_size=5, sigma_bounds=(1.0, advised_sigma)))
+    wider = Grid(advised_resolution)
+    PRFFitter(
+        wider,
+        np.zeros((20, *wider.shape)),
+        FitConfig(grid_size=5, sigma_bounds=(1.0, 20.0)),
+    )
+
+
+def test_a_sigma_of_exactly_resolution_over_six_is_rejected(grid) -> None:
+    """The resolution/6 rule of thumb is slightly too generous; the guard is the authority."""
+    from cortexprobe.config import ConfigError
+    from cortexprobe.prf.fit import RESOLUTION_PER_SIGMA
+
+    assert RESOLUTION_PER_SIGMA > 6.0
+
+    with pytest.raises(ConfigError, match="keeps only"):
+        PRFFitter(
+            grid,
+            np.zeros((20, *grid.shape)),
+            FitConfig(grid_size=5, sigma_bounds=(1.0, grid.resolution / 6.0)),
+        )
