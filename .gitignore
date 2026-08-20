@@ -15,3 +15,6 @@ results/*
 !results/*.json
 !results/*.md
 .DS_Store
+
+# internal working notes, never part of the project
+FIX_PROMPT.md
