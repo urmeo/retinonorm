@@ -7,14 +7,27 @@
 [0001](0001-unit-volume-gaussian.md) relies on every receptive field carrying the same total
 weight. The grid breaks that at both extremes, by two different mechanisms.
 
-Below the pixel pitch the Gaussian is under-sampled. At `sigma = 0.2` on a 64 px field it sums
-to 0.031 for a pRF centred on a pixel, 0.160 a quarter pixel off-lattice, and 0.350 half a pixel
-off — all far from 1.0, and all dependent on where the centre happens to fall.
+Below the pixel pitch the Gaussian is under-sampled, and the sum depends entirely on where the
+centre falls relative to the lattice. `Grid` places pixel centres at half-integers, so the field
+origin is itself half a pixel off-lattice in both axes. At `sigma = 0.2` on a 64 px field:
 
-Above roughly `resolution / 6` it is truncated by the edge of the field. Ninety-nine per cent of
-a Gaussian lies within ±3σ and the field radius is `resolution / 2`, so the property survives
-while `3σ ≤ resolution / 2`. Measured on a 64 px field: `sigma = 10` retains 0.994, `sigma = 20`
-retains 0.723, `sigma = 40` retains 0.275.
+| pRF centre | on-grid sum |
+|---|---|
+| the field origin — half a pixel off-lattice in both axes | 0.031 |
+| a quarter pixel from the origin | 0.160 |
+| half a pixel from the origin, on-lattice in x | 0.350 |
+| exactly on a pixel centre | **3.979** |
+
+None is 1.0, and the error runs in *both* directions: a pRF sitting on a pixel collects nearly
+four times unit volume, one sitting between pixels a thirtieth of it. An earlier draft of this
+record quoted only the undershoot, and mislabelled it as the on-pixel case.
+
+Above roughly `resolution / 6.1` it is truncated by the edge of the field. The radial mass of a
+**two-dimensional** Gaussian within 3σ is `1 − exp(−4.5) = 0.9889` — the familiar 99 % figure is
+the one-dimensional one — so the 0.99 tolerance needs slightly tighter than `3σ ≤ resolution / 2`.
+Measured on the grid, the largest admissible sigma is `resolution / 6.095` at 64, 128 and 256 px
+alike, and a sigma of exactly `resolution / 6` is rejected. Measured on a 64 px field:
+`sigma = 10` retains 0.994, `sigma = 20` retains 0.723, `sigma = 40` retains 0.275.
 
 Only the floor was guarded. The ceiling is the more dangerous of the two: the shortfall grows
 monotonically with sigma, so it biases the fit against large pRFs — the exact axis H1 measures.
@@ -40,5 +53,7 @@ fixtures that fitted sigma up to 18 on a 64 px field; they moved to a ceiling of
 passed before because the same truncated model both generated and fitted the data, so the error
 cancelled and the suite could not see it.
 
-Measuring pRFs larger than `resolution / 6` requires raising the resolution, which is the honest
-cost: the field has to be big enough to contain what is being measured.
+Measuring pRFs larger than `resolution / 6.1` requires raising the resolution, which is the
+honest cost: the field has to be big enough to contain what is being measured. The fitter's error
+message offers both routes and sizes them with the same 6.1 factor; an earlier version suggested
+`sigma × 6`, and following that advice reproduced the very error it was explaining.

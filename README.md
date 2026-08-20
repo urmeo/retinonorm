@@ -147,7 +147,7 @@ Per-unit cost is flat, so nothing quadratic hides in the loop. Cross-validation 
 ## Design decisions
 
 - **Unit-volume Gaussians** — normalised by `1/(2πσ²)`; unit-peak would make overlap grow with σ by construction, making H1 true by parameterisation.
-- **σ bounded both ends** — floor 1 px (under-sampled below the pixel pitch: σ=0.2 sums to 0.031–0.350 depending on sub-pixel offset); ceiling ≈ `resolution/6` (truncated by the field: σ=20 on 64 px retains 0.723, σ=40 retains 0.275).
+- **σ bounded both ends** — floor 1 px: below the pixel pitch the sum depends on sub-pixel position, running **0.031** between pixels to **3.979** on a pixel centre, so it overshoots as badly as it undershoots. Ceiling ≈ `resolution/6.1`: beyond it the field truncates the Gaussian (σ=20 on 64 px retains 0.723, σ=40 retains 0.275).
 - **Amplitude projected, not searched** — closed-form least squares for `beta`, `baseline`; optimiser explores only `x0, y0, σ`.
 - **`beta > 0` required** — a suppressed unit fits a flawless pRF with the sign reversed (`beta=-3.000`, `R²=1.0000`).
 - **`converged` ≠ `accepted`** — `converged` is the optimiser; `accepted` adds R² threshold, positive amplitude, σ not pinned. Centre at the field edge stays accepted; pinned σ does not.
