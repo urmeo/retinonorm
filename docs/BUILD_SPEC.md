@@ -16,7 +16,8 @@ torch       >=2.2,<3        MPS backend on Apple silicon
 torchvision >=0.17,<1       frozen pretrained weights
 numpy       >=1.24,<3
 scipy       >=1.11,<2       least_squares (Levenberg–Marquardt / TRF)
-matplotlib  >=3.8,<4        figures only, never in library code paths
+matplotlib  >=3.7,<4        `viz` extra; figures only, never in library code paths
+pandas      >=2.0,<3        `io` extra, with pyarrow>=15; arrives with prf/result.py
 ```
 
 Dev: `ruff`, `mypy` (strict), `pytest`, `pytest-cov`, `hypothesis`.
@@ -32,8 +33,8 @@ Hard constraints from measured hardware (8 GB RAM, no CUDA):
 Frozen dataclasses. The only source of run truth; nothing reads loose kwargs.
 
 ```python
-@dataclass(frozen=True, slots=True)
-class StimulusConfig:
+@dataclass(frozen=True)
+class StimulusConfig(ConfigBase):
     resolution: int  # square field, pixels
     n_steps: int  # frames per sweep direction
     bar_width_frac: float  # bar width as fraction of field
@@ -43,23 +44,24 @@ class StimulusConfig:
     max_fold_similarity: float  # largest tolerated held-out/training frame overlap
 
 
-@dataclass(frozen=True, slots=True)
-class ModelConfig:
+@dataclass(frozen=True)
+class ModelConfig(ConfigBase):
     name: str  # registry key
     layers: tuple[str, ...]  # tap points
-    weights_seed: int | None  # None = pretrained
+    weights_seed: Optional[int]  # None = pretrained; not `int | None`, see below
+    pool_to: int  # spatial positions per channel after pooling; >= 2
 
 
-@dataclass(frozen=True, slots=True)
-class FitConfig:
+@dataclass(frozen=True)
+class FitConfig(ConfigBase):
     grid_size: int  # coarse search resolution
     sigma_bounds: tuple[float, float]
     max_nfev: int
     r2_threshold: float  # below this, unit is not reported as fitted
 
 
-@dataclass(frozen=True, slots=True)
-class RunConfig:
+@dataclass(frozen=True)
+class RunConfig(ConfigBase):
     stimulus: StimulusConfig
     model: ModelConfig
     fit: FitConfig
@@ -71,9 +73,16 @@ class RunConfig:
 **Invariant:** `RunConfig.digest()` is stable across processes and platforms. Two runs with
 equal digests must produce bit-identical stimuli.
 
-**Acceptance:** round-trip `RunConfig → JSON → RunConfig` is identity; digest stable across
-two interpreter sessions. Both are covered by `tests/test_config.py`, along with every
-`__post_init__` guard.
+**Acceptance:** round-trip `RunConfig → JSON → RunConfig` is identity, and every
+`__post_init__` guard fires — both covered by `tests/test_config.py`. Digest stability *across
+processes and platforms* is not a unit test: it is enforced by the `reproducibility` CI job,
+which re-derives `config_digest` on Linux/3.9 and Linux/3.12 and compares it against the value
+recorded on macOS in `results/validation.json`.
+
+`slots=True` and `int | None` both appear obvious here and both are wrong for this project.
+`slots=` requires Python 3.10; the floor is 3.9. `int | None` is evaluated at runtime by
+`get_type_hints` inside `from_dict`, which raises `TypeError` on 3.9 — hence `Optional[int]`, as
+recorded in the `per-file-ignores` note in `pyproject.toml`.
 
 **Corrected during implementation.** `carrier_seed` is not in `StimulusConfig`. The carrier has
 no consumer until `models.py` provides a network to drive, and a configuration knob that
@@ -87,10 +96,20 @@ carrier.
 Generates the aperture sequence used for both prediction and model input.
 
 ```python
-def bar_apertures(cfg: StimulusConfig) -> np.ndarray:       # (T, H, W) bool
-def wedge_apertures(cfg: StimulusConfig) -> np.ndarray:
-def ring_apertures(cfg: StimulusConfig) -> np.ndarray:
-def carrier(cfg: StimulusConfig) -> np.ndarray:             # (T, H, W) float32 in [0,1]  -- with models.py
+class ApertureGenerator(ABC):                               # BarSweep / RotatingWedge / ExpandingRing
+    def build(self) -> ApertureSequence: ...
+    @property
+    def n_frames(self) -> int: ...                          # before leakage pruning
+
+@dataclass(frozen=True)
+class ApertureSequence:                                     # apertures (T,H,W) bool, grid, kind,
+    ...                                                     # frame_index, group; .coverage, .as_float()
+
+def build_apertures(config: StimulusConfig, kind: str = "bar") -> ApertureSequence
+def frame_similarity(stack: BoolArray) -> FloatArray        # (T, T) pairwise cosine
+
+# with models.py, when there is a network input to drive:
+def carrier(cfg: StimulusConfig) -> np.ndarray:             # (T, H, W) float32 in [0,1]
 def render(apertures, carrier) -> np.ndarray:               # (T, 3, H, W) float32, ImageNet-normalised
 ```
 
@@ -113,11 +132,11 @@ to drive.
 **Corrected during implementation.** An earlier draft of this spec required bar aperture area to
 be constant across frames. Measurement showed it is not, and should not be: the circular field
 mask clips the bar as it approaches the edge, so area rises and falls across a sweep
-(86 → 512 → 86 px at resolution 64). This matches human retinotopy, where the stimulus is
+(86 px at the edge to 542 px at the centre, resolution 64). This matches human retinotopy, where the stimulus is
 circularly masked for the same reason. The invariant was wrong; the behaviour is correct.
 Coverage per frame is exposed as `ApertureSequence.coverage` so the fit can account for it.
 
-**Acceptance:** determinism test on repeated generation; field-containment test; declared-vs-actual
+**Acceptance:** `tests/test_stimuli.py` — determinism on repeated generation; field containment; declared-vs-actual
 frame count test for every generator.
 
 ---
@@ -173,8 +192,16 @@ that a second identical call reproduces the array bit-for-bit.
 ## 5. `prf/model.py`
 
 ```python
-def gaussian_rf(x0, y0, sigma, grid: Grid) -> np.ndarray          # (H, W), unit volume
-def predict(rf: np.ndarray, apertures: np.ndarray) -> np.ndarray  # (T,) overlap timecourse
+@dataclass(frozen=True)
+class GaussianReceptiveField(ReceptiveField):                     # x0, y0, sigma
+    def weights(self, grid: Grid) -> FloatArray                   # (H, W), unit volume
+    @property
+    def eccentricity(self) -> float
+    @property
+    def polar_angle(self) -> float
+
+def predict(weights: FloatArray, apertures: FloatArray) -> FloatArray   # (T,) overlap timecourse
+def design_matrix(fields, grid: Grid, apertures: FloatArray) -> FloatArray  # (T, n_fields)
 ```
 
 The predicted response at time *t* is the summed overlap of the receptive field with the aperture:
@@ -183,11 +210,13 @@ convolution — a CNN has no haemodynamics, and adding one would be a fabricated
 This departure from the fMRI procedure is deliberate and is documented in the README.
 
 **Invariants**
-- `gaussian_rf` integrates to 1.0 within 1e-6 for sigma comfortably inside the field.
-- `predict` is linear in `rf`.
+- `GaussianReceptiveField.weights` integrates to 1.0 for sigma comfortably inside the field;
+  outside that range it does not, which is why both bounds are guarded (see §6 and ADR-0002).
+- `predict` is linear in the receptive field.
 - Translating `(x0, y0)` translates the response of a translated aperture identically.
 
-**Acceptance:** normalisation test; linearity test; translation-equivariance test.
+**Acceptance:** `tests/test_prf_model.py` — unit-volume test; linearity in the receptive field;
+translation equivariance (pRF and aperture shifted together predict identically).
 
 ---
 
@@ -197,16 +226,35 @@ Two stages. Coarse grid search over `(x0, y0, sigma)` selects a basin; `scipy.op
 refines within it. Grid search alone is too coarse; refinement alone lands in local minima.
 
 ```python
-def fit_unit(timecourse, apertures, grid, cfg: FitConfig) -> UnitFit
-def fit_all(activations, apertures, cfg, n_jobs) -> PRFResult
+class PRFFitter:
+    def __init__(self, grid: Grid, apertures: FloatArray, config: FitConfig) -> None
+    def fit_unit(self, response: FloatArray) -> UnitFit
+    def fit_all(self, activations: FloatArray) -> list[UnitFit]      # (frames, units)
 ```
 
-`UnitFit` carries `x0, y0, sigma, beta, baseline, r2, converged, n_fev`.
+Nothing parallelises today; per-unit cost is flat, so there is no `n_jobs`.
+
+`UnitFit` carries the fitted geometry `x0, y0, sigma`, the projected `beta, baseline`, the score
+`r2`, the optimiser's `converged` and `n_fev`, the linearised `se_x0, se_y0, se_sigma` with `dof`
+and the `r2_threshold` used, the misspecification diagnostic `second_field_r2`, and the three
+bound flags `x0_at_bound, y0_at_bound, sigma_at_bound` (with `at_bound` as their disjunction).
+
+**`converged` is not `accepted`.** `converged` is the optimiser's own report. `accepted` is the
+scientific claim, and is the flag downstream analysis must gate on:
+`converged and r2 >= r2_threshold and beta > 0 and not sigma_at_bound`. The optimiser converges
+happily on pure noise, so gating on `converged` alone would report every noise unit as a pRF. A
+negative `beta` is a suppressed unit, not a receptive field; a sigma pinned at the ceiling records
+where the search stopped. See ADR-0003 and ADR-0004.
 
 **Invariants**
-- A unit whose timecourse is constant returns `converged=False`, `r2=0.0` — never a fitted pRF.
+- A unit whose timecourse is constant returns `accepted=False`, `r2=0.0` — never a fitted pRF.
 - `r2` is computed against the *same* timecourse used for fitting; no separate scaling.
-- Fitted `sigma` is inside `cfg.sigma_bounds`, or `converged=False`.
+- Fitted `sigma` is inside `cfg.sigma_bounds`; at the ceiling it sets `sigma_at_bound` and is not
+  accepted.
+- Degrees of freedom count *distinct* frames, not presented frames: a frame shown twice is not a
+  second observation.
+- `PRFFitter` refuses a `sigma_bounds` ceiling the grid cannot represent, and refuses non-finite
+  apertures, at construction.
 - Deterministic: same inputs ⇒ same output, to floating tolerance.
 
 **Acceptance — this is the project's load-bearing test.**
@@ -217,7 +265,7 @@ sizes, add controlled noise at several SNRs, run `fit_all`, assert:
 |---|---|
 | noiseless | position error < 0.5 px, sigma error < 5%, `r2 > 0.99` |
 | moderate noise | position error < 1.5 px, `r2 > 0.8` |
-| pure noise input | `converged=False` or `r2 < r2_threshold` for ≥95% of units |
+| pure noise input | `accepted=False` for ≥95% of units |
 
 If this test does not pass, no downstream result is reported. Non-negotiable.
 
@@ -322,8 +370,11 @@ A milestone is complete only when all hold:
 3. `pytest` passes; branch coverage ≥ 85% on `src/cortexprobe/`.
 4. The ground-truth recovery test (§6) passes.
 5. No number appears in any `.md` that was not produced by a run recorded in `results/`.
-   Enforced by `scripts/generate_validation_report.py --check` in CI, which re-measures every
-   quoted figure and confirms the committed tables were rendered from it.
+   Enforced for `README.md` by `scripts/generate_validation_report.py --check` in CI, which
+   re-measures every figure inside the generated regions and confirms `README.md` and
+   `results/VALIDATION.md` were rendered from them. Numbers quoted in `docs/` — this file, the
+   ADRs — are not machine-checked; they are verified by hand against the code and cite what to
+   run.
 6. Commit message is a short human phrase, one concern per commit.
 
 ---

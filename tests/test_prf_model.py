@@ -119,3 +119,34 @@ def test_a_field_far_outside_the_grid_contributes_nothing() -> None:
 
     assert np.isfinite(weights).all()
     assert weights.sum() == pytest.approx(0.0, abs=1e-12)
+
+
+def test_prediction_is_linear_in_the_receptive_field() -> None:
+    """The invariant the spec states: `predict` is linear in the field, not just the aperture."""
+    grid = Grid(32)
+    apertures = np.random.default_rng(2).random((8, *grid.shape))
+    first = GaussianReceptiveField(3.0, 3.0, 2.0).weights(grid)
+    second = GaussianReceptiveField(-5.0, 1.0, 4.0).weights(grid)
+
+    combined = predict(2.0 * first + 3.0 * second, apertures)
+    separately = 2.0 * predict(first, apertures) + 3.0 * predict(second, apertures)
+
+    assert np.allclose(combined, separately)
+
+
+def test_translating_field_and_aperture_together_leaves_the_response_unchanged() -> None:
+    """Translation equivariance: the response depends on relative position, not absolute.
+
+    A pRF one pixel to the right, seen through apertures rolled one pixel to the right, must
+    predict exactly what the original pair predicted. If it did not, a fitted position would
+    depend on where in the field the stimulus happened to sit.
+    """
+    grid = Grid(64)
+    apertures = np.random.default_rng(0).random((8, *grid.shape))
+    here = GaussianReceptiveField(4.0, -2.0, 3.0).weights(grid)
+    one_right = GaussianReceptiveField(5.0, -2.0, 3.0).weights(grid)
+
+    assert np.allclose(
+        predict(here, apertures),
+        predict(one_right, np.roll(apertures, 1, axis=2)),
+    )
