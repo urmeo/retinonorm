@@ -87,9 +87,11 @@ def autocorrelated_noise(n_frames: int, width: int = 3, seed: int = 21) -> np.nd
 def default_stimulus_config() -> StimulusConfig:
     """The configuration a user gets with no overrides at all.
 
-    Every other fixture here pins a smaller, four-direction stimulus so the suite stays fast.
-    No four-direction set can contain a pair 180 degrees apart, so that config structurally
-    cannot exhibit the duplicate-sweep leak the shipped default once had -- which is exactly
-    why the default is fixtured separately and asserted against directly.
+    Every other fixture here pins a smaller stimulus so the suite stays fast, with directions
+    (0, 45, 90, 135). Those particular angles contain no pair 180 degrees apart, so that config
+    cannot exhibit the duplicate-sweep leak the shipped default once had. That is a property of
+    the angles chosen, not of choosing four of them -- (0, 90, 180, 270) has two such pairs and
+    is equally legal -- which is exactly why the default is fixtured here and asserted against
+    directly rather than trusted to be representative.
     """
     return StimulusConfig()

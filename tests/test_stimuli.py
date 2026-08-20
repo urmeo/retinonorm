@@ -110,6 +110,26 @@ def test_opposite_sweeps_produce_identical_frames() -> None:
         assert np.array_equal(flat[step], flat[2 * n_steps - 1 - step])
 
 
+def test_a_four_direction_set_can_still_contain_opposite_sweeps() -> None:
+    """Four directions is no protection; (0, 90, 180, 270) has two opposite pairs.
+
+    The test fixture is safe because of the angles it picks, not because it picks four of them.
+    Axis grouping is what makes this configuration honest, so it is asserted directly.
+    """
+    config = StimulusConfig(resolution=RESOLUTION, n_steps=20, directions=(0, 90, 180, 270))
+    sequence = build_apertures(config, "bar")
+    flat = sequence.apertures.reshape(sequence.n_frames, -1)
+
+    assert sorted(np.unique(sequence.group)) == [0, 90]
+
+    for group in np.unique(sequence.group):
+        held_out = {flat[i].tobytes() for i in np.flatnonzero(sequence.group == group)}
+        training = {flat[i].tobytes() for i in np.flatnonzero(sequence.group != group)}
+        assert held_out.isdisjoint(training)
+
+    assert _cross_group_similarity(sequence).max() < config.max_fold_similarity
+
+
 def test_a_single_sweep_axis_still_builds() -> None:
     """One group is useless for cross-validation, but that is the validator's complaint."""
     config = StimulusConfig(resolution=RESOLUTION, n_steps=20, directions=(30, 210))
