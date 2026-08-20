@@ -10,14 +10,16 @@ happened, both invisible to the test suite.
 A bar sweep's position depends on `x cos θ + y sin θ`, which negates under a 180° turn, while
 the travel offsets run symmetrically from `-radius` to `+radius`. Frame `(d, k)` is therefore
 bit-identical to frame `(d + 180, n_steps - 1 - k)`. Grouping by direction placed those copies
-in different folds. Under the shipped eight-direction default, all 20 held-out frames in every
-group appeared verbatim in the training set, and mean held-out-to-training cosine similarity was
-1.000. The suite could not see it: `conftest.py` pinned four directions, and no four-direction
-set can contain a pair 180° apart.
+in different folds. Under the shipped eight-direction default (128 px, 32 steps), every one of
+the 32 held-out frames in every group appeared verbatim in the training set — 256 of 256 overall
+— and mean held-out-to-training cosine similarity was 1.000. The suite could not see it:
+`conftest.py` pins the directions `(0, 45, 90, 135)`, which happens to contain no pair 180°
+apart. That is a property of those particular angles, not of having four of them: `(0, 90, 180,
+270)` is a four-direction set with two such pairs, and the configuration accepts it.
 
 Wedge and ring groups came from index arithmetic — `start // 90`, `step // block` — which never
-consulted how much neighbouring apertures actually share. Ring was worst, with a held-out frame
-reaching cosine 0.806 against a training frame.
+consulted how much neighbouring apertures actually share. Ring was worst: a held-out frame reached
+cosine 0.871 against a training frame under the default, and 0.806 under the test fixture.
 
 ## Decision
 
@@ -31,14 +33,16 @@ the frame in the most surviving violations first. The threshold lives in the con
 it is part of the run digest.
 
 Considered and rejected: grouping by connected components of the above-threshold similarity
-graph. Ring frames have lag-1 similarity 0.797, above the 0.75 threshold, so consecutive frames
-chain the entire sequence into a single component and leave no folds at all.
+graph. Under the default, every consecutive ring pair has similarity of at least 0.811 — above the
+0.75 threshold — so the chain links all 32 frames into one component and leaves no folds at all.
+(On the smaller fixture the collapse is partial rather than total, its weakest lag-1 pair being
+0.736; the default is the case that matters.)
 
 ## Consequences
 
-The default configuration now yields four honest folds with worst-case similarity 0.312, equal
-to the four-direction fixture. Ring loses three of twenty frames; bar and wedge already sat under
-the threshold and lose none.
+The default configuration now yields four honest folds with worst-case similarity 0.319, close
+to the test fixture's 0.312. Under the default, ring loses three of its thirty-two frames; bar and
+wedge already sat under the threshold and lose none. (On the fixture, ring loses three of twenty.)
 
 The duplicate frames remain in the eight-direction default. They cost fitting time and carry no
 information, and degrees of freedom must count distinct frames or every standard error is too
