@@ -115,9 +115,10 @@ class UnitFit:
 
         A pRF sitting at the edge of the visual field is a real measurement -- receptive
         fields do lie near the field boundary -- so ``x0`` or ``y0`` at a bound is not
-        disqualifying. A sigma pinned against the search ceiling is different: it says the
-        true size lies outside the range that was searched, so the reported value records
-        where the search stopped rather than what the data support.
+        disqualifying. A sigma pinned against *either* end of its search range is different:
+        it says the true size lies outside the range that was searched, so the reported value
+        records where the search stopped rather than what the data support. Both ends count --
+        a pRF driven to the floor is as unmeasured as one driven to the ceiling.
 
         A negative ``beta`` is disqualifying too. The amplitude is solved by unconstrained
         least squares, so a unit whose response *falls* when the aperture covers a location
@@ -165,6 +166,16 @@ def _r_squared(response: FloatArray, fitted: FloatArray) -> float:
         return 0.0
     residual = float(np.sum((response - fitted) ** 2))
     return 1.0 - residual / total
+
+
+def _even_at_least(value: float) -> int:
+    """Smallest even integer at or above ``value``.
+
+    Both halves of the sigma-ceiling message have to name a figure the caller can actually use:
+    rounding to nearest can land under the requirement, and an odd resolution is rejected
+    outright by :class:`~cortexprobe.config.StimulusConfig`.
+    """
+    return 2 * math.ceil(value / 2)
 
 
 def _count_distinct_frames(apertures: FloatArray) -> int:
@@ -262,8 +273,8 @@ class PRFFitter:
                 f"{MIN_ON_GRID_VOLUME} tolerance. A Gaussian this wide relative to the field "
                 "is truncated, so its overlap with an aperture understates the true value by "
                 "an amount that grows with sigma. Lower the bound to about "
-                f"{self.grid.resolution / RESOLUTION_PER_SIGMA:.0f} px, or raise the grid "
-                f"resolution to about {math.ceil(sigma_high * RESOLUTION_PER_SIGMA)} px."
+                f"{math.floor(self.grid.resolution / RESOLUTION_PER_SIGMA)} px, or raise the "
+                f"grid resolution to about {_even_at_least(sigma_high * RESOLUTION_PER_SIGMA)} px."
             )
 
     @property
