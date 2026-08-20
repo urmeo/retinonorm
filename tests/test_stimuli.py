@@ -266,3 +266,33 @@ def test_generation_is_deterministic(small_config, kind) -> None:
     assert np.array_equal(first.apertures, second.apertures)
     assert np.array_equal(first.frame_index, second.frame_index)
     assert np.array_equal(first.group, second.group)
+
+
+def test_pruning_error_does_not_advise_raising_n_steps() -> None:
+    """Raising n_steps shortens the step without narrowing the aperture, so overlap rises.
+
+    The message once advised it, which never cleared the error in any configuration that
+    could raise it.
+    """
+    config = StimulusConfig(
+        resolution=RESOLUTION, n_steps=8, ring_thickness_frac=0.9, max_fold_similarity=0.05
+    )
+
+    with pytest.raises(ConfigError) as raised:
+        build_apertures(config, "ring")
+    message = str(raised.value)
+
+    assert "narrow the aperture" in message
+    assert "Raising n_steps does not help" in message
+
+
+def test_more_steps_means_more_cross_group_overlap() -> None:
+    """The measurement behind that error message, so the advice cannot drift back."""
+    worst = []
+    for n_steps in (4, 8, 16, 32):
+        config = StimulusConfig(
+            resolution=32, n_steps=n_steps, ring_thickness_frac=0.5, max_fold_similarity=0.999
+        )
+        worst.append(_cross_group_similarity(build_apertures(config, "ring")).max())
+
+    assert worst == sorted(worst)

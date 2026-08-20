@@ -1,6 +1,7 @@
 """Held-out validation of fitted pRFs.
 
-In-sample R² measures how well three free parameters can be bent to fit one timecourse. It
+In-sample R² measures how well five free parameters can be bent to fit one timecourse:
+three searched (``x0``, ``y0``, ``sigma``) plus an amplitude and baseline solved in closed form. It
 says nothing about whether the pRF generalises to stimulus positions the fit never saw.
 
 Folds are split by *sweep group*, never by individual frame. Adjacent frames within a sweep
