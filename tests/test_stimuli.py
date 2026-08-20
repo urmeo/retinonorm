@@ -255,3 +255,14 @@ def test_unknown_stimulus_kind_names_the_alternatives(small_config) -> None:
 
 def test_generator_registry_covers_every_kind() -> None:
     assert set(GENERATORS) == set(KINDS)
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_generation_is_deterministic(small_config, kind) -> None:
+    """Two builds of the same configuration must be bit-identical, frames and labels alike."""
+    first = build_apertures(small_config, kind)
+    second = build_apertures(small_config, kind)
+
+    assert np.array_equal(first.apertures, second.apertures)
+    assert np.array_equal(first.frame_index, second.frame_index)
+    assert np.array_equal(first.group, second.group)
