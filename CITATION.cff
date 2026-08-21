@@ -34,3 +34,20 @@ references:
     end: 660
     year: 2008
     doi: 10.1016/j.neuroimage.2007.09.034
+  - type: article
+    title: "Circular analysis in systems neuroscience: the dangers of double dipping"
+    authors:
+      - given-names: Nikolaus
+        family-names: Kriegeskorte
+      - given-names: W. Kyle
+        family-names: Simmons
+      - given-names: Patrick S. F.
+        family-names: Bellgowan
+      - given-names: Chris I.
+        family-names: Baker
+    journal: Nature Neuroscience
+    volume: 12
+    issue: 5
+    start: 535
+    end: 540
+    year: 2009

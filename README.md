@@ -24,7 +24,7 @@
 ## What this is
 
 - Measures **population receptive fields** in convolutional units with the procedure human fMRI uses (Dumoulin & Wandell, 2008): sweep an aperture, record the timecourse, fit a 2-D Gaussian.
-- Output is a *measured* pRF for an artificial unit, in the same units as the human quantity — so lesions and seed-to-seed variation become measurable, not asserted.
+- Output is a *measured* pRF for an artificial unit, in the same form as the human quantity — a 2-D Gaussian centre and width, in pixels of the synthetic field rather than degrees of visual angle — so lesions and seed-to-seed variation become measurable, not asserted.
 - Needs no restricted data. Stimuli are generated in-repo, the "brain" is a frozen network, every number reproduces on a laptop.
 - Built to **refuse its own bad answers**: noise, suppressed units, truncated Gaussians and leaky folds are all rejected or flagged rather than reported.
 
@@ -39,21 +39,22 @@ python3 -m pip install -e '.[dev]'
 Fit a pRF to a synthetic unit, end to end:
 
 ```python
-import numpy as np
 from cortexprobe import StimulusConfig, FitConfig
 from cortexprobe.geometry import Grid
 from cortexprobe.stimuli import build_apertures
 from cortexprobe.prf.fit import PRFFitter
 from cortexprobe.prf.model import GaussianReceptiveField, predict
 
-grid      = Grid(64)                                   # 64 px circular visual field
-sequence  = build_apertures(StimulusConfig(resolution=64, n_steps=20,
-                                           directions=(0, 45, 90, 135)))
-apertures = sequence.as_float()                        # (80, 64, 64) bar sweeps
-fitter    = PRFFitter(grid, apertures, FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0)))
+grid = Grid(64)  # 64 px circular visual field
+sequence = build_apertures(
+    StimulusConfig(resolution=64, n_steps=20, directions=(0, 45, 90, 135)),
+    kind="bar",  # or "wedge", "ring"
+)
+apertures = sequence.as_float()  # (80, 64, 64) bar sweeps
+fitter = PRFFitter(grid, apertures, FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0)))
 
 # a unit whose true pRF sits at (12, 8) with sigma 5
-truth    = GaussianReceptiveField(12.0, 8.0, 5.0)
+truth = GaussianReceptiveField(12.0, 8.0, 5.0)
 response = 3.0 * predict(truth.weights(grid), apertures) + 0.5
 
 fit = fitter.fit_unit(response)
@@ -78,9 +79,12 @@ To hold data out honestly, cross-validate by sweep group rather than by frame:
 ```python
 from cortexprobe.prf.validation import CrossValidator
 
-validator = CrossValidator(grid, apertures, sequence.group, FitConfig(grid_size=10,
-                                                                     sigma_bounds=(1.0, 10.0)))
+validator = CrossValidator(
+    grid, apertures, sequence.group, FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0))
+)
 print(validator.validate_unit(response).cv_r2)
+# 1.0    Held out by sweep axis, and still exact: this unit is noiseless.
+#        cv_r2 scores frames the fold never trained on, unlike fit.r2 above.
 ```
 
 ---
@@ -91,13 +95,13 @@ Each row is a way the instrument could return a confident wrong answer. Each is 
 
 <table width="820">
 <tr><th align="left" width="190">Check</th><th align="left" width="270">Question</th><th align="left" width="360">Result</th></tr>
-<tr><td>Ground-truth recovery</td><td>Can it recover a pRF it generated itself?</td><td><b>0.000 px</b> noiseless; worst <b>0.772 px</b> at 50 % noise</td></tr>
-<tr><td>Noise rejection</td><td>Does it refuse a pRF that isn't there?</td><td><b>40 / 40 rejected</b>; best spurious R² 0.1947 &lt; 0.2</td></tr>
+<tr><td>Ground-truth recovery</td><td>Can it recover a pRF it generated itself?</td><td><b>0.000 px</b> noiseless; <b>0.51 px</b> mean at 50 % noise (n = 5, one noise draw)</td></tr>
+<tr><td>Noise rejection</td><td>Does it refuse a pRF that isn't there?</td><td><b>0 / 40 accepted</b> at the recorded seed; <b>~0.3 %</b> accepted over n = 4000</td></tr>
 <tr><td>Suppression</td><td>Is a unit that <i>dims</i> reported as a pRF?</td><td>Rejected — β = −3.000 <b>despite R² = 1.0000</b></td></tr>
 <tr><td>Fold leakage</td><td>Does "held out" mean held out?</td><td>Worst held-out↔train cosine <b>1.000 → 0.312</b></td></tr>
 <tr><td>Split leakage</td><td>Does a random frame split inflate the score?</td><td><b>+0.459 ± 0.402</b> on correlated noise, 17/20 seeds</td></tr>
 <tr><td>Interval coverage</td><td>Do the 95 % intervals actually cover?</td><td><b>0.915 – 0.935</b> measured, n = 200 per cell</td></tr>
-<tr><td>Misspecification</td><td>Is a two-lobed unit flagged?</td><td>Yes — 0.206 – 0.473 vs ≤ 0.023 for one lobe</td></tr>
+<tr><td>Misspecification</td><td>Is a two-lobed unit flagged?</td><td>Yes — 0.206 – 0.473 two-lobe vs ≤ 0.023 single, 0.056 pure noise</td></tr>
 <tr><td>Unit volume</td><td>Is the Gaussian normalised on the grid?</td><td>Guarded both ends: 1 px floor, <code>resolution/6.1</code> ceiling</td></tr>
 <tr><td>Degrees of freedom</td><td>Is a repeated frame a second observation?</td><td>No — distinct frames only, else SE is √2 too small</td></tr>
 </table>
@@ -117,14 +121,14 @@ Configuration: 64 px field · 80 frames · 4 sweep directions · 300 candidates 
 ### Recovery of known pRFs
 
 <!-- BEGIN GENERATED: recovery -->
-| Condition | Position error, worst (px) | mean (px) | Sigma error, worst (%) | mean (%) | Minimum R² |
+| Condition | Position error, largest (px) | mean (px) | Sigma error, largest (%) | mean (%) | Minimum R² |
 |---|---|---|---|---|---|
 | Noiseless | 0.000 | 0.000 | 0.0 | 0.0 | 1.0000 |
 | 20% noise | 0.287 | 0.197 | 5.2 | 2.3 | 0.9696 |
 | 50% noise | 0.772 | 0.511 | 12.8 | 5.6 | 0.8326 |
 | Pure noise | — | — | — | — | **40 / 40 rejected** |
 
-Worst and mean are taken over n = 5 ground-truth pRFs. On pure noise the fitter accepted none of 40 units, and its best spurious R² was 0.1947, below the 0.2 acceptance threshold.
+Largest and mean are over n = 5 ground-truth pRFs sharing a single noise realisation, so the largest is one draw and not a worst case: across 50 fresh seeds the 50 % row averages 0.83 px and reaches 2.81 px. On pure noise the fitter accepted none of 40 units at this seed, its best spurious R² being 0.1947 against the 0.2 threshold; over n = 4000 the acceptance rate is 0.27 %.
 
 <sub>Recorded on macOS-26.6.1 arm64, Python 3.12.13, NumPy 2.5.2, SciPy 1.18.0 | config digest `4d6a856a499e` | generated 2026-08-19</sub>
 <!-- END GENERATED: recovery -->
@@ -205,18 +209,21 @@ Per-unit cost is flat, so nothing quadratic hides in the loop. Cross-validation 
 </table>
 
 Every figure is drawn by `scripts/generate_figures.py`, from the same configuration and the same
-measurement code as the tables above, so a figure cannot disagree with the table beside it.
+measurement code as the tables above, so a figure cannot disagree with the numbers it illustrates.
 
 ---
 
 ## How it works
 
 ```
-config ─▶ stimuli ─▶ model ─▶ activations ─▶ prf.fit ─┬─▶ lesion
-   │         │                                        ├─▶ individuals
-   │         └── CV groups ──▶ prf.validation ────────┴─▶ evaluation ─▶ report
-   └── SHA-256 digest ─────────────────────────────────────▶ results/
+config ─▶ stimuli ─▶ models* ─▶ activations* ─▶ prf.fit ─┬─▶ lesion*
+   │         │                                            ├─▶ individuals*
+   │         └── CV groups ──▶ prf.validation ────────────┴─▶ evaluation* ─▶ report*
+   └── SHA-256 digest ─────────────────────────────────────────▶ results/
 ```
+
+`*` not built yet — see [Module status](#module-status). Everything unstarred is implemented,
+tested, and produces the numbers above.
 
 <table width="820">
 <tr><th align="left" width="200">Step</th><th align="left" width="620">What happens</th></tr>
@@ -224,11 +231,17 @@ config ─▶ stimuli ─▶ model ─▶ activations ─▶ prf.fit ─┬─�
 <tr><td>2 · Prediction</td><td>A candidate pRF <code>w(x,y)</code> predicts <code>r(t) = Σ w · a<sub>t</sub></code> — the overlap of the field with each aperture</td></tr>
 <tr><td>3 · Coarse search</td><td>300 candidates on a grid of positions × log-spaced sigmas pick the basin</td></tr>
 <tr><td>4 · Refine</td><td>Bounded trust-region least squares on <code>(x₀, y₀, σ)</code>; amplitude and baseline are projected, never searched</td></tr>
-<tr><td>5 · Accept or reject</td><td>R² threshold, positive amplitude, σ off its bound — otherwise not a pRF</td></tr>
+<tr><td>5 · Accept or reject</td><td>Two flags, not one. <code>converged</code> is the optimiser's report; <code>accepted</code> additionally requires the R² threshold, positive amplitude and a σ off its bound. A fit can converge cleanly on noise — only <code>accepted</code> means pRF</td></tr>
 <tr><td>6 · Validate</td><td>Leave-one-sweep-axis-out CV; train-fold amplitude applied unchanged to test frames</td></tr>
 </table>
 
 ### Stimulus designs
+
+Three aperture families, all binary masks on the same circular field, all read by the same fitter.
+A **bar** sweeps straight across at each angle in `directions`, sampling both axes of position. A
+**wedge** rotates about the centre, sampling polar angle. A **ring** expands outward, sampling
+eccentricity. Bars localise best because they constrain *x* and *y* together; a ring constrains
+eccentricity but not angle.
 
 <table width="820">
 <tr><th align="left" width="140">Design</th><th align="left" width="110">Frames</th><th align="left" width="110">CV groups</th><th align="left" width="240">Grouped by</th><th align="left" width="220">Worst held-out overlap</th></tr>
@@ -237,11 +250,14 @@ config ─▶ stimuli ─▶ model ─▶ activations ─▶ prf.fit ─┬─�
 <tr><td>ring</td><td>17</td><td>4</td><td>eccentricity block, overlap-pruned</td><td>0.600</td></tr>
 </table>
 
-A bar sweep at `d` and at `d + 180°` are **bit-identical** — the projection negates and the offsets
-are symmetric. Grouping by direction put those copies in different folds, so every held-out frame
-appeared verbatim in training. Grouping by *axis* fixes it; ring and wedge additionally drop the
-frames that still overlap a training frame above `max_fold_similarity = 0.75`, which lives in the
-config and therefore in the run digest.
+A bar sweep at `d` and its return at `d + 180°` carry **the same frames in reverse order**: the bar's
+position is `x cos θ + y sin θ`, which negates at `d + 180°`, while the travel offsets run
+symmetrically from `−radius` to `+radius`. So frame `k` of `d` is bit-identical to frame
+`n_steps − 1 − k` of `d + 180°`. Grouping by direction put those copies in different folds, so every held-out frame
+appeared verbatim in training. Grouping by *axis* fixes it. On top of that, **every** design drops any frame whose cosine overlap
+with a frame in another group exceeds `max_fold_similarity = 0.75`, which lives in the config and
+therefore in the run digest. In this configuration only ring actually loses frames — 20 laid out,
+17 kept; bar and wedge already sit under the threshold.
 
 ---
 
@@ -264,10 +280,29 @@ Full records with measurements: [`docs/adr/`](docs/adr/)
 
 ## Module status
 
+```
+src/cortexprobe/
+├── arrays.py          dtype-bearing array aliases
+├── config.py          frozen dataclasses, guards, SHA-256 run digest
+├── geometry.py        visual field coordinates and the circular field mask
+├── stimuli.py         bar / wedge / ring apertures, CV grouping, leakage pruning
+└── prf/
+    ├── model.py       Gaussian pRF → predicted timecourse
+    ├── fit.py         coarse grid → bounded refine, uncertainty, diagnostics
+    └── validation.py  leave-one-sweep-axis-out cross-validation
+tests/                 243 tests, 9 modules
+scripts/               generate_validation_report.py, generate_figures.py
+benchmarks/            benchmark_scaling.py
+configs/               versioned run configs
+docs/                  BUILD_SPEC.md, PLAN.md, adr/, figures/
+results/               validation.json + VALIDATION.md, committed and CI-checked
+```
+
 <table width="820">
 <tr><th align="left" width="330">Stage</th><th align="left" width="220">Module</th><th align="left" width="130">State</th><th align="left" width="140">Coverage</th></tr>
 <tr><td>Run config, digest, IO</td><td><code>config.py</code></td><td>✅ done</td><td>100 %</td></tr>
 <tr><td>Visual field coordinates</td><td><code>geometry.py</code></td><td>✅ done</td><td>100 %</td></tr>
+<tr><td>Array dtype aliases</td><td><code>arrays.py</code></td><td>✅ done</td><td>100 %</td></tr>
 <tr><td>Bar / wedge / ring apertures, CV groups</td><td><code>stimuli.py</code></td><td>✅ done</td><td>100 %</td></tr>
 <tr><td>Gaussian pRF, predicted response</td><td><code>prf/model.py</code></td><td>✅ done</td><td>100 %</td></tr>
 <tr><td>Two-stage fit, uncertainty, diagnostics</td><td><code>prf/fit.py</code></td><td>✅ done</td><td>99 %</td></tr>
@@ -296,7 +331,7 @@ python3 -m pytest -q --cov
 <tr><td><code>ruff format --check .</code></td><td>pass</td></tr>
 <tr><td><code>ruff check .</code></td><td>pass</td></tr>
 <tr><td><code>mypy</code> (strict)</td><td>pass — 9 source files</td></tr>
-<tr><td><code>pytest --cov</code></td><td><b>243 tests</b>, <b>99.7 %</b> branch coverage (floor 85 %)</td></tr>
+<tr><td><code>pytest --cov</code></td><td><b>243 tests</b>, <b>99.7 %</b> coverage with branches measured (floor 85 %)</td></tr>
 <tr><td>Python</td><td>3.9 and 3.12, both in CI, no <code>continue-on-error</code></td></tr>
 </table>
 
@@ -304,7 +339,7 @@ python3 -m pytest -q --cov
 <tr><th align="left" width="270">Suite</th><th align="left" width="90">Tests</th><th align="left" width="460">What it establishes</th></tr>
 <tr><td><code>test_config.py</code></td><td>42</td><td>Every guard fires; digest stable and sensitive to nested change</td></tr>
 <tr><td><code>test_prf_edge_cases.py</code></td><td>56</td><td>Bounds, suppression, misspecification, degenerate and hostile input</td></tr>
-<tr><td><code>test_stimuli.py</code></td><td>43</td><td><b>No held-out frame resembles a training frame</b>, default config included</td></tr>
+<tr><td><code>test_stimuli.py</code></td><td>43</td><td><b>No held-out frame duplicates a training frame</b>, and none overlaps one above 0.75 cosine — default config included</td></tr>
 <tr><td><code>test_cross_validation.py</code></td><td>19</td><td>Whole-group folds; the leakage mechanism pinned to a distribution</td></tr>
 <tr><td><code>test_prf_recovery.py</code></td><td>18</td><td>Known parameters recovered; noise rejected</td></tr>
 <tr><td><code>test_geometry.py</code></td><td>18</td><td>Coordinate conventions and the field mask</td></tr>
@@ -324,9 +359,9 @@ python3 -m pip install -e '.[viz]' && python3 scripts/generate_figures.py
 python3 benchmarks/benchmark_scaling.py                # runtime scaling
 ```
 
-- Every number above comes from [`results/validation.json`](results/validation.json); the same tables are in [`results/VALIDATION.md`](results/VALIDATION.md).
+- Every number in the four generated tables comes from [`results/validation.json`](results/validation.json); the same tables are in [`results/VALIDATION.md`](results/VALIDATION.md). Figures quoted elsewhere — fold overlaps, unit volumes, the misspecification range — are measured in the ADR that records each, and reproduced by the test suite.
 - `--check` re-measures and compares within tolerance, then confirms the tables were rendered from those numbers. **CI runs it on 3.9 and 3.12.**
-- All measurements except runtime reproduce **byte-identically** across Python 3.9–3.12 and NumPy/SciPy versions.
+- Every measurement except runtime reproduces **to the last digit these tables display**, on Python 3.9–3.12 and across NumPy and SciPy versions. The raw `results/validation.json` can still move in its sixth decimal — one value reads `5.63086` on NumPy 2.5 and `5.630861` on NumPy 2.0 — which is why `--check` compares within a tolerance rather than byte for byte.
 - Config digest `4d6a856a499e` — [`configs/validation.json`](configs/validation.json).
 
 ---
@@ -349,8 +384,10 @@ python3 benchmarks/benchmark_scaling.py                # runtime scaling
 - **No network has been probed.** Every number here is instrument validation on synthetic ground truth. The four hypotheses are untested.
 - A frozen ImageNet CNN has no recurrence, no separate excitatory and inhibitory populations, and no cortical magnification. It is not a model of visual cortex.
 - No haemodynamic response is convolved — a CNN has none. This departs from the fMRI procedure deliberately, and is why a sweep and its 180° return are identical.
-- Interval coverage runs slightly under nominal (0.915–0.935 against 0.95), lowest near the field edge, where the linearisation behind it is weakest.
+- Interval coverage runs slightly under nominal: **742 of 800** realisations covered, 0.928 against 0.95 (binomial p = 0.006). The four cells span 0.915–0.935 but are not distinguishable from one another, so no claim is made about which condition is worst.
 - The misspecification diagnostic separates cleanly at low noise and narrows at high noise; no cut is claimed to transfer to another stimulus or lobe geometry.
+- **Pure-noise rejection is a rate, not a guarantee.** 0 of 40 at the recorded seed, but about **0.3 %** of pure-noise units are accepted over n = 4000, with spurious R² reaching 0.30. A 10 000-unit layer should expect on the order of **30 spurious pRFs**, and should filter on more than acceptance alone.
+- **The recovery table is one noise realisation per condition** — all five ground-truth pRFs share seed 7. Over 50 fresh seeds the 50 %-noise position error averages **0.83 px** and reaches **2.81 px**, and 48 % of fits exceed the tabulated 0.772 px. Read that column as a draw, not a bound.
 - Runtime figures are single-run and hardware-specific. They carry the machine, not an error bar.
 
 ---
@@ -368,7 +405,8 @@ python3 benchmarks/benchmark_scaling.py                # runtime scaling
 
 **Method.** Dumoulin, S. O., & Wandell, B. A. (2008). Population receptive field estimates in
 human visual cortex. *NeuroImage*, 39(2), 647–660. The pRF estimation procedure this project
-applies unchanged to convolutional units.
+adapts to convolutional units — without the haemodynamic convolution, for which a network has no
+analogue, and in pixels rather than degrees of visual angle.
 
 **Why held-out matters.** Kriegeskorte, N., Simmons, W. K., Bellgowan, P. S. F., & Baker, C. I.
 (2009). Circular analysis in systems neuroscience: the dangers of double dipping.
@@ -380,6 +418,35 @@ avoid.
 
 ---
 
+## Contributing
+
+- Open an issue before a large change — [Module status](#module-status) and [Future work](#future-work) say what is already claimed.
+- A change lands when all five gates pass: `ruff format --check .`, `ruff check .`, `mypy`, `pytest -q --cov`, and `scripts/generate_validation_report.py --check`. CI runs them on 3.9 and 3.12 with no `continue-on-error`.
+- **Do not hand-edit anything between `<!-- BEGIN GENERATED: … -->` and `<!-- END GENERATED: … -->`.** Those four regions are written by `scripts/generate_validation_report.py`; an edit there is reverted by the next run and fails the reproducibility job.
+- Changing a measured number means regenerating the report and committing `results/` in the same commit.
+- One concern per commit, short lowercase messages — see `git log`.
+
+---
+
+## Cite
+
+```bibtex
+@software{cortexprobe,
+  author  = {Urme},
+  title   = {{CortexProbe}: population receptive fields and lesion effects
+             in convolutional models of the visual hierarchy},
+  year    = {2026},
+  version = {0.1.0},
+  license = {MIT},
+  url     = {https://github.com/urmeo/retinonorm}
+}
+```
+
+Machine-readable metadata in [`CITATION.cff`](CITATION.cff). Citing the software is not a citation
+of any scientific result — none is claimed here. For the method, cite Dumoulin & Wandell (2008).
+
+---
+
 ## Licence
 
-MIT — [`LICENSE`](LICENSE) · citation metadata in [`CITATION.cff`](CITATION.cff)
+MIT — [`LICENSE`](LICENSE)
