@@ -30,6 +30,61 @@
 
 ---
 
+## Quickstart
+
+```bash
+python3 -m pip install -e '.[dev]'
+```
+
+Fit a pRF to a synthetic unit, end to end:
+
+```python
+import numpy as np
+from cortexprobe import StimulusConfig, FitConfig
+from cortexprobe.geometry import Grid
+from cortexprobe.stimuli import build_apertures
+from cortexprobe.prf.fit import PRFFitter
+from cortexprobe.prf.model import GaussianReceptiveField, predict
+
+grid      = Grid(64)                                   # 64 px circular visual field
+sequence  = build_apertures(StimulusConfig(resolution=64, n_steps=20,
+                                           directions=(0, 45, 90, 135)))
+apertures = sequence.as_float()                        # (80, 64, 64) bar sweeps
+fitter    = PRFFitter(grid, apertures, FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0)))
+
+# a unit whose true pRF sits at (12, 8) with sigma 5
+truth    = GaussianReceptiveField(12.0, 8.0, 5.0)
+response = 3.0 * predict(truth.weights(grid), apertures) + 0.5
+
+fit = fitter.fit_unit(response)
+
+print(fit.x0, fit.y0, fit.sigma, fit.r2, fit.accepted)
+# 12.0 8.0 5.0 1.0 True          recovered exactly: this unit is noiseless
+
+print(fit.second_field_r2)
+# 3.2e-33                        no second pRF would explain anything more
+
+print(fit.confidence_interval("x0"))
+# (11.999999999999998, 12.000000000000002)
+# A perfect fit gives a degenerate interval — the residual is at machine precision.
+# Add noise and it widens: see the uncertainty table below.
+```
+
+Swap `response` for a real activation timecourse and the same call measures a network unit —
+that is the whole interface. `fit_all(activations)` takes a `(frames, units)` matrix.
+
+To hold data out honestly, cross-validate by sweep group rather than by frame:
+
+```python
+from cortexprobe.prf.validation import CrossValidator
+
+validator = CrossValidator(grid, apertures, sequence.group, FitConfig(grid_size=10,
+                                                                     sigma_bounds=(1.0, 10.0)))
+print(validator.validate_unit(response).cv_r2)
+```
+
+---
+
 ## Instrument validation
 
 Each row is a way the instrument could return a confident wrong answer. Each is measured, and each is a test.
