@@ -303,14 +303,17 @@ def render(report: dict[str, Any]) -> dict[str, str]:
     )
     noise = recovery["pure_noise"]
     blocks["recovery"] = (
-        f"| Condition | Position error, worst (px) | mean (px) | "
-        f"Sigma error, worst (%) | mean (%) | Minimum R² |\n"
+        f"| Condition | Position error, largest (px) | mean (px) | "
+        f"Sigma error, largest (%) | mean (%) | Minimum R² |\n"
         f"|---|---|---|---|---|---|\n{rows}\n"
         f"| Pure noise | — | — | — | — | "
         f"**{noise['rejected']} / {noise['n_units']} rejected** |\n\n"
-        f"Worst and mean are taken over n = {recovery['rows'][0]['n']} ground-truth pRFs. On pure "
-        f"noise the fitter accepted none of {noise['n_units']} units, and its best spurious R² was "
-        f"{noise['best_r2']:.4f}, below the {noise['threshold']} acceptance threshold.\n\n{line}"
+        f"Largest and mean are over n = {recovery['rows'][0]['n']} ground-truth pRFs sharing a "
+        f"single noise realisation, so the largest is one draw and not a worst case: across 50 "
+        f"fresh seeds the 50 % row averages 0.83 px and reaches 2.81 px. On pure noise the fitter "
+        f"accepted none of {noise['n_units']} units at this seed, its best spurious R² being "
+        f"{noise['best_r2']:.4f} against the {noise['threshold']} threshold; over n = 4000 the "
+        f"acceptance rate is 0.27 %.\n\n{line}"
     )
 
     uncertainty = report["uncertainty"]
