@@ -190,23 +190,29 @@ Per-unit cost is flat, so nothing quadratic hides in the loop. Cross-validation 
 
 ## Graphs and charts
 
-<table width="820">
-<tr>
-<td align="center" width="273"><img src="docs/figures/recovery.png" width="262" alt="Recovery error against noise"><br><sub><b>Recovery</b> — error grows gracefully</sub></td>
-<td align="center" width="273"><img src="docs/figures/uncertainty.png" width="262" alt="Uncertainty and coverage"><br><sub><b>Uncertainty</b> — and its coverage</sub></td>
-<td align="center" width="273"><img src="docs/figures/leakage.png" width="262" alt="Grouped versus random-split CV"><br><sub><b>Leakage</b> — grouped vs random split</sub></td>
-</tr>
-<tr>
-<td align="center" width="273"><img src="docs/figures/fold-leakage.png" width="262" alt="Held-out frame similarity"><br><sub><b>Fold integrity</b> — 1.000 → 0.312</sub></td>
-<td align="center" width="273"><img src="docs/figures/sigma-guard.png" width="262" alt="Unit volume against sigma"><br><sub><b>Unit volume</b> — guarded both ends</sub></td>
-<td align="center" width="273"><img src="docs/figures/misspecification.png" width="262" alt="Two-lobe diagnostic"><br><sub><b>Misspecification</b> — two lobes flagged</sub></td>
-</tr>
-<tr>
-<td align="center" width="273"><img src="docs/figures/stimuli.png" width="262" alt="Bar, wedge and ring stimuli"><br><sub><b>Stimuli</b> — bar, wedge, ring</sub></td>
-<td align="center" width="273"><img src="docs/figures/model.png" width="262" alt="The forward model"><br><sub><b>Forward model</b> — pRF × aperture</sub></td>
-<td align="center" width="273"><img src="docs/figures/runtime.png" width="262" alt="Runtime scaling"><br><sub><b>Runtime</b> — flat per unit</sub></td>
-</tr>
-</table>
+![Recovery error against noise](docs/figures/recovery.png)
+**Recovery** — position and size error grow gracefully with noise; the red line is the largest of five pRFs.
+
+![Uncertainty and coverage](docs/figures/uncertainty.png)
+**Uncertainty** — standard errors track the noise, and the 95 % intervals are checked for coverage at n = 200 per cell.
+
+![Grouped versus random-split cross-validation](docs/figures/leakage.png)
+**Leakage** — a random frame split inflates the held-out score on temporally correlated noise; grouping by sweep axis does not.
+
+![Held-out frame similarity](docs/figures/fold-leakage.png)
+**Fold integrity** — worst held-out↔training overlap, before and after grouping by axis and pruning.
+
+![Unit volume against sigma](docs/figures/sigma-guard.png)
+**Unit volume** — guarded at both ends: under-sampled below 1 px, truncated by the field above `resolution/6.1`.
+
+![Two-lobe misspecification diagnostic](docs/figures/misspecification.png)
+**Misspecification** — one Gaussian fitted to two lobes is flagged, not silently mis-reported.
+
+![Bar, wedge and ring stimuli](docs/figures/stimuli.png)
+**Stimuli** — the three aperture families, frames labelled by cross-validation group.
+
+![Runtime scaling](docs/figures/runtime.png)
+**Runtime** — per-unit cost is flat; cross-validation costs a constant factor.
 
 Every figure is drawn by `scripts/generate_figures.py`, from the same configuration and the same
 measurement code as the tables above, so a figure cannot disagree with the numbers it illustrates.
@@ -222,8 +228,8 @@ config ─▶ stimuli ─▶ models* ─▶ activations* ─▶ prf.fit ─┬�
    └── SHA-256 digest ─────────────────────────────────────────▶ results/
 ```
 
-`*` not built yet — see [Module status](#module-status). Everything unstarred is implemented,
-tested, and produces the numbers above.
+`*` not built yet — see [Future work](#future-work). Everything unstarred is implemented, tested,
+and produces the numbers above.
 
 <table width="820">
 <tr><th align="left" width="200">Step</th><th align="left" width="620">What happens</th></tr>
@@ -277,45 +283,6 @@ therefore in the run digest. In this configuration only ring actually loses fram
 Full records with measurements: [`docs/adr/`](docs/adr/)
 
 ---
-
-## Module status
-
-```
-src/cortexprobe/
-├── arrays.py          dtype-bearing array aliases
-├── config.py          frozen dataclasses, guards, SHA-256 run digest
-├── geometry.py        visual field coordinates and the circular field mask
-├── stimuli.py         bar / wedge / ring apertures, CV grouping, leakage pruning
-└── prf/
-    ├── model.py       Gaussian pRF → predicted timecourse
-    ├── fit.py         coarse grid → bounded refine, uncertainty, diagnostics
-    └── validation.py  leave-one-sweep-axis-out cross-validation
-tests/                 243 tests, 9 modules
-scripts/               generate_validation_report.py, generate_figures.py
-benchmarks/            benchmark_scaling.py
-configs/               versioned run configs
-docs/                  BUILD_SPEC.md, PLAN.md, adr/, figures/
-results/               validation.json + VALIDATION.md, committed and CI-checked
-```
-
-<table width="820">
-<tr><th align="left" width="330">Stage</th><th align="left" width="220">Module</th><th align="left" width="130">State</th><th align="left" width="140">Coverage</th></tr>
-<tr><td>Run config, digest, IO</td><td><code>config.py</code></td><td>✅ done</td><td>100 %</td></tr>
-<tr><td>Visual field coordinates</td><td><code>geometry.py</code></td><td>✅ done</td><td>100 %</td></tr>
-<tr><td>Array dtype aliases</td><td><code>arrays.py</code></td><td>✅ done</td><td>100 %</td></tr>
-<tr><td>Bar / wedge / ring apertures, CV groups</td><td><code>stimuli.py</code></td><td>✅ done</td><td>100 %</td></tr>
-<tr><td>Gaussian pRF, predicted response</td><td><code>prf/model.py</code></td><td>✅ done</td><td>100 %</td></tr>
-<tr><td>Two-stage fit, uncertainty, diagnostics</td><td><code>prf/fit.py</code></td><td>✅ done</td><td>99 %</td></tr>
-<tr><td>Grouped cross-validation</td><td><code>prf/validation.py</code></td><td>✅ done</td><td>100 %</td></tr>
-<tr><td>Result container, Parquet IO</td><td><code>prf/result.py</code></td><td>⬜ not started</td><td>—</td></tr>
-<tr><td>Network loading, layer taps</td><td><code>models.py</code></td><td>⬜ not started</td><td>—</td></tr>
-<tr><td>Activation extraction</td><td><code>activations.py</code></td><td>⬜ not started</td><td>—</td></tr>
-<tr><td>Lesion operators</td><td><code>lesion.py</code></td><td>⬜ not started</td><td>—</td></tr>
-<tr><td>Seeded instances</td><td><code>individuals.py</code></td><td>⬜ not started</td><td>—</td></tr>
-<tr><td>H1–H4 statistics</td><td><code>evaluation.py</code></td><td>⬜ not started</td><td>—</td></tr>
-<tr><td>Maps, plots, report</td><td><code>viz.py</code></td><td>⬜ not started</td><td>—</td></tr>
-<tr><td>Command line</td><td><code>cli.py</code></td><td>⬜ not started</td><td>—</td></tr>
-</table>
 
 ---
 
@@ -423,7 +390,7 @@ avoid.
 
 ## Contributing
 
-- Open an issue before a large change — [Module status](#module-status) and [Future work](#future-work) say what is already claimed.
+- Open an issue before a large change — [Future work](#future-work) says what is already claimed.
 - A change lands when all five gates pass: `ruff format --check .`, `ruff check .`, `mypy`, `pytest -q --cov`, and `scripts/generate_validation_report.py --check`. CI runs them on 3.9 and 3.12 with no `continue-on-error`.
 - **Do not hand-edit anything between `<!-- BEGIN GENERATED: … -->` and `<!-- END GENERATED: … -->`.** Those four regions are written by `scripts/generate_validation_report.py`; an edit there is reverted by the next run and fails the reproducibility job.
 - Changing a measured number means regenerating the report and committing `results/` in the same commit.
