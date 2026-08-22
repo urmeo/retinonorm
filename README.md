@@ -4,14 +4,6 @@
 
 **Population receptive fields and lesion effects in convolutional models of the visual hierarchy.**
 
-[![ci](https://github.com/urmeo/retinonorm/actions/workflows/ci.yml/badge.svg)](https://github.com/urmeo/retinonorm/actions/workflows/ci.yml)
-![python](https://img.shields.io/badge/python-3.9%20|%203.12-blue)
-![tests](https://img.shields.io/badge/tests-243-brightgreen)
-![coverage](https://img.shields.io/badge/coverage-99.7%25-brightgreen)
-![licence](https://img.shields.io/badge/licence-MIT-lightgrey)
-
-[Validation report](results/VALIDATION.md) · [Design records](docs/adr/) · [Build spec](docs/BUILD_SPEC.md) · [Plan](docs/PLAN.md)
-
 ![The forward model](docs/figures/model.png)
 
 > **Scope.** The instrument is validated. **No network has been probed.** All four hypotheses —
