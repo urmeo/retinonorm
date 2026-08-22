@@ -15,10 +15,10 @@
 
 ## What this is
 
-- Measures **population receptive fields** in convolutional units with the procedure human fMRI uses (Dumoulin & Wandell, 2008): sweep an aperture, record the timecourse, fit a 2-D Gaussian.
-- Output is a *measured* pRF for an artificial unit, in the same form as the human quantity — a 2-D Gaussian centre and width, in pixels of the synthetic field rather than degrees of visual angle — so lesions and seed-to-seed variation become measurable, not asserted.
-- Needs no restricted data. Stimuli are generated in-repo, the "brain" is a frozen network, every number reproduces on a laptop.
-- Built to **refuse its own bad answers**: noise, suppressed units, truncated Gaussians and leaky folds are all rejected or flagged rather than reported.
+- Measures **population receptive fields** in convolutional units by the fMRI method: sweep an aperture, record the timecourse, fit a 2-D Gaussian.
+- A *measured* pRF — centre and width in pixels, not degrees — makes lesions and seed spread measurable.
+- No restricted data — in-repo stimuli, frozen network, laptop-reproducible.
+- Built to **refuse its own bad answers** — noise, suppression, truncation, leaky folds.
 
 ---
 
@@ -28,56 +28,29 @@
 python3 -m pip install -e '.[dev]'
 ```
 
-Fit a pRF to a synthetic unit, end to end:
-
 ```python
-from cortexprobe import StimulusConfig, FitConfig
+from cortexprobe import FitConfig, StimulusConfig
 from cortexprobe.geometry import Grid
-from cortexprobe.stimuli import build_apertures
 from cortexprobe.prf.fit import PRFFitter
 from cortexprobe.prf.model import GaussianReceptiveField, predict
-
-grid = Grid(64)  # 64 px circular visual field
-sequence = build_apertures(
-    StimulusConfig(resolution=64, n_steps=20, directions=(0, 45, 90, 135)),
-    kind="bar",  # or "wedge", "ring"
-)
-apertures = sequence.as_float()  # (80, 64, 64) bar sweeps
-fitter = PRFFitter(grid, apertures, FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0)))
-
-# a unit whose true pRF sits at (12, 8) with sigma 5
-truth = GaussianReceptiveField(12.0, 8.0, 5.0)
-response = 3.0 * predict(truth.weights(grid), apertures) + 0.5
-
-fit = fitter.fit_unit(response)
-
-print(fit.x0, fit.y0, fit.sigma, fit.r2, fit.accepted)
-# 12.0 8.0 5.0 1.0 True          recovered exactly: this unit is noiseless
-
-print(fit.second_field_r2)
-# 3.2e-33                        no second pRF would explain anything more
-
-print(fit.confidence_interval("x0"))
-# (11.999999999999998, 12.000000000000002)
-# A perfect fit gives a degenerate interval — the residual is at machine precision.
-# Add noise and it widens: see the uncertainty table below.
-```
-
-Swap `response` for a real activation timecourse and the same call measures a network unit —
-that is the whole interface. `fit_all(activations)` takes a `(frames, units)` matrix.
-
-To hold data out honestly, cross-validate by sweep group rather than by frame:
-
-```python
 from cortexprobe.prf.validation import CrossValidator
+from cortexprobe.stimuli import build_apertures
 
-validator = CrossValidator(
-    grid, apertures, sequence.group, FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0))
-)
-print(validator.validate_unit(response).cv_r2)
-# 1.0    Held out by sweep axis, and still exact: this unit is noiseless.
-#        cv_r2 scores frames the fold never trained on, unlike fit.r2 above.
+grid = Grid(64)
+sequence = build_apertures(StimulusConfig(resolution=64, n_steps=20, directions=(0, 45, 90, 135)))
+apertures = sequence.as_float()
+config = FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0))
+
+response = 3.0 * predict(GaussianReceptiveField(12.0, 8.0, 5.0).weights(grid), apertures) + 0.5
+
+fit = PRFFitter(grid, apertures, config).fit_unit(response)
+print(fit.x0, fit.y0, fit.sigma, fit.accepted)  # 12.0 8.0 5.0 True
+
+held_out = CrossValidator(grid, apertures, sequence.group, config).validate_unit(response)
+print(held_out.cv_r2)  # 1.0 — scored on frames the fold never trained on
 ```
+
+Swap `response` for real activations; `fit_all` takes `(frames, units)`.
 
 ---
 
