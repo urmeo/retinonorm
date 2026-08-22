@@ -359,10 +359,9 @@ python3 -m pip install -e '.[viz]' && python3 scripts/generate_figures.py
 python3 benchmarks/benchmark_scaling.py                # runtime scaling
 ```
 
-- Every number in the four generated tables comes from [`results/validation.json`](results/validation.json); the same tables are in [`results/VALIDATION.md`](results/VALIDATION.md). Figures quoted elsewhere — fold overlaps, unit volumes, the misspecification range — are measured in the ADR that records each, and reproduced by the test suite.
-- `--check` re-measures and compares within tolerance, then confirms the tables were rendered from those numbers. **CI runs it on 3.9 and 3.12.**
-- Every measurement except runtime reproduces **to the last digit these tables display**, on Python 3.9–3.12 and across NumPy and SciPy versions. The raw `results/validation.json` can still move in its sixth decimal — one value reads `5.63086` on NumPy 2.5 and `5.630861` on NumPy 2.0 — which is why `--check` compares within a tolerance rather than byte for byte.
-- Config digest `4d6a856a499e` — [`configs/validation.json`](configs/validation.json).
+- Tables ← [`results/validation.json`](results/validation.json); other numbers live in their [ADR](docs/adr/), pinned by tests.
+- `--check` compares within tolerance, not bytes. CI runs it on 3.9 and 3.12.
+- Digest `4d6a856a499e` — [`configs/validation.json`](configs/validation.json).
 
 ---
 
@@ -381,23 +380,27 @@ python3 benchmarks/benchmark_scaling.py                # runtime scaling
 
 ## Limitations
 
-- **No network has been probed.** Every number here is instrument validation on synthetic ground truth. The four hypotheses are untested.
-- A frozen ImageNet CNN has no recurrence, no separate excitatory and inhibitory populations, and no cortical magnification. It is not a model of visual cortex.
-- No haemodynamic response is convolved — a CNN has none. This departs from the fMRI procedure deliberately, and is why a sweep and its 180° return are identical.
-- Interval coverage runs slightly under nominal: **742 of 800** realisations covered, 0.928 against 0.95 (binomial p = 0.006). The four cells span 0.915–0.935 but are not distinguishable from one another, so no claim is made about which condition is worst.
-- The misspecification diagnostic separates cleanly at low noise and narrows at high noise; no cut is claimed to transfer to another stimulus or lobe geometry.
-- **Pure-noise rejection is a rate, not a guarantee.** 0 of 40 at the recorded seed, but about **0.3 %** of pure-noise units are accepted over n = 4000, with spurious R² reaching 0.30. A 10 000-unit layer should expect on the order of **30 spurious pRFs**, and should filter on more than acceptance alone.
-- **The recovery table is one noise realisation per condition** — all five ground-truth pRFs share seed 7. Over 50 fresh seeds the 50 %-noise position error averages **0.83 px** and reaches **2.81 px**, and 48 % of fits exceed the tabulated 0.772 px. Read that column as a draw, not a bound.
-- Runtime figures are single-run and hardware-specific. They carry the machine, not an error bar.
+<table width="820">
+<tr><th align="left" width="230">Limitation</th><th align="left" width="590">Detail</th></tr>
+<tr><td><b>No network probed</b></td><td>Synthetic validation only; four hypotheses untested</td></tr>
+<tr><td>Not a cortex model</td><td>No recurrence, E/I populations, magnification or HRF</td></tr>
+<tr><td>Coverage under nominal</td><td>742/800 = 0.928 vs 0.95, p = 0.006; cells indistinguishable</td></tr>
+<tr><td>Rejection is a <b>rate</b></td><td>~0.3 % of noise units accepted — ~30 per 10 000</td></tr>
+<tr><td>Recovery is <b>one draw</b></td><td>All five share seed 7; 50 seeds → 0.83 px mean, 2.81 max</td></tr>
+<tr><td>Single-run figures</td><td>Runtime hardware-specific; no misspecification cut transfers</td></tr>
+</table>
 
 ---
 
 ## Future work
 
-- `models.py` and `activations.py` — frozen network loading and hooked activation extraction, the first point at which a real pRF is measured.
-- `lesion.py` — silence units in an early layer, refit downstream pRFs, quantify the artificial scotoma.
-- `individuals.py` — independently seeded instances as a measurable individual-difference axis.
-- Vectorise the coarse search across candidates; roughly an order of magnitude on the dominant stage, worth doing before 10 000-unit layers.
+<table width="820">
+<tr><th align="left" width="290">Next</th><th align="left" width="530">Why</th></tr>
+<tr><td><code>models.py</code>, <code>activations.py</code></td><td>Tap a network — the first real pRF</td></tr>
+<tr><td><code>lesion.py</code></td><td>Artificial scotoma</td></tr>
+<tr><td><code>individuals.py</code></td><td>Seeded instances</td></tr>
+<tr><td>Vectorise the coarse search</td><td>~10× before 10 000 units</td></tr>
+</table>
 
 ---
 
