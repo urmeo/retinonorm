@@ -40,6 +40,21 @@ def test_splitter_requires_two_groups() -> None:
         LeaveOneGroupOut(np.zeros(10, dtype=int))
 
 
+@pytest.mark.parametrize("offset", [-1, 1])
+def test_cross_validation_requires_a_group_for_every_frame(
+    grid, apertures, fit_config, offset
+) -> None:
+    groups = np.arange(len(apertures) + offset) % 4
+
+    with pytest.raises(ValueError, match="one group per stimulus frame"):
+        CrossValidator(grid, apertures, groups, fit_config)
+
+
+def test_splitter_rejects_missing_group_labels() -> None:
+    with pytest.raises(ValueError, match="finite"):
+        LeaveOneGroupOut(np.array([0.0, 1.0, np.nan]))
+
+
 def test_real_signal_generalises(validator, grid, apertures) -> None:
     result = validator.validate_unit(synthesise(grid, apertures, TRUTH, noise=0.3, seed=9))
 

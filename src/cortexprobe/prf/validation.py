@@ -61,6 +61,8 @@ class LeaveOneGroupOut:
         self.groups = np.asarray(groups)
         if self.groups.ndim != 1:
             raise ValueError("groups must be one-dimensional")
+        if not np.isfinite(self.groups).all():
+            raise ValueError("groups must be finite")
         self.unique = np.unique(self.groups)
         if len(self.unique) < 2:
             raise ValueError("cross-validation needs at least two sweep groups")
@@ -95,6 +97,8 @@ class CrossValidator:
         self.splitter = LeaveOneGroupOut(groups)
 
         self._full = PRFFitter(grid, self.apertures, config)
+        if len(self.splitter.groups) != self._full.n_frames:
+            raise ValueError("groups must have one group per stimulus frame")
         self._folds: list[tuple[IntArray, IntArray, PRFFitter]] = []
         for train, test in self.splitter.splits():
             if len(train) <= N_PARAMETERS:
