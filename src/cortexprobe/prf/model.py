@@ -1,16 +1,12 @@
-"""The population receptive field model.
+"""Gaussian receptive-field overlap in pixel coordinates.
 
-A pRF is a weighting over the visual field. Its predicted response to a stimulus frame is the
-overlap between that weighting and the exposed aperture, following Dumoulin & Wandell (2008),
-*NeuroImage* 39:647-660.
-
-One deliberate departure from the fMRI procedure: no haemodynamic convolution. A convolutional
-network has no haemodynamics, and adding an HRF would be a biological detail this model does not
-possess. The predicted timecourse is therefore the raw overlap sequence.
+Adapted from Dumoulin & Wandell (2008), NeuroImage 39:647-660. Predictions are raw aperture
+overlaps, without the haemodynamic convolution used for fMRI.
 """
 
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -41,8 +37,23 @@ class GaussianReceptiveField(ReceptiveField):
     sigma: float
 
     def __post_init__(self) -> None:
+        for name in ("x0", "y0", "sigma"):
+            value = getattr(self, name)
+            try:
+                valid = (
+                    isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and math.isfinite(value)
+                )
+            except OverflowError:
+                valid = False
+            if not valid:
+                raise ValueError(f"{name} must be finite")
         if self.sigma <= 0:
             raise ValueError("sigma must be positive")
+        variance = self.sigma * self.sigma
+        if variance == 0.0 or not math.isfinite(2.0 * math.pi * variance):
+            raise ValueError("sigma cannot be represented by the Gaussian model")
 
     @property
     def eccentricity(self) -> float:
@@ -53,22 +64,12 @@ class GaussianReceptiveField(ReceptiveField):
         return float(np.degrees(np.arctan2(self.y0, self.x0)) % 360.0)
 
     def weights(self, grid: Grid) -> FloatArray:
-        """Field weights on ``grid``, normalised to unit volume.
+        """Sample a Gaussian whose continuous integral is one.
 
-        Dividing by ``2 * pi * sigma**2`` makes a wide pRF spread the same total weight more
-        thinly rather than accumulate more of it. Under unit-peak normalisation every pRF
-        would share a maximum of 1.0, so its overlap with the aperture would grow with sigma
-        by construction, and H1 -- pRF size increasing with depth -- would be guaranteed by
-        the parameterisation instead of measured.
-
-        The Gaussian is not truncated by this function, but the grid truncates it anyway: the
-        unit-volume property holds only while ``sigma`` is small relative to the field. The
-        radial mass of a 2-D Gaussian within 3 sigma is ``1 - exp(-4.5) = 0.9889``, just under
-        the 0.99 tolerance the fitter enforces, so unit volume survives only while sigma stays
-        under roughly ``resolution / 6.1`` -- see ``RESOLUTION_PER_SIGMA``. On a 64 px grid a
-        sigma of 20 retains 0.723 of it. :class:`~cortexprobe.prf.fit.PRFFitter` refuses a
-        sigma ceiling that breaches this, because the shortfall grows with sigma and would bias
-        size-versus-depth comparisons.
+        Finite grids truncate its mass, particularly near an edge. The fitter checks the
+        centered field at the sigma ceiling; this does not guarantee mass at other centers.
+        Unit volume defines the amplitude convention. A free fitted beta absorbs the scaling
+        between unit-volume and unit-peak weights, so this choice does not force a size trend.
         """
         dx = grid.x - self.x0
         dy = grid.y - self.y0
@@ -78,11 +79,11 @@ class GaussianReceptiveField(ReceptiveField):
 
 
 def predict(weights: FloatArray, apertures: FloatArray) -> FloatArray:
-    """Predicted response timecourse for a receptive field under a stimulus sequence.
-
-    The response at frame ``t`` is the summed overlap of the field with the exposed aperture,
-    ``r(t) = sum_xy w(x, y) * aperture_t(x, y)``.
-    """
+    """Frame overlaps: ``r(t) = sum_xy w(x, y) * aperture_t(x, y)``."""
+    if weights.ndim != 2 or apertures.ndim != 3:
+        raise ValueError("weights must be 2D and apertures must have shape (frames, height, width)")
+    if len(apertures) == 0:
+        raise ValueError("prediction requires at least one aperture frame")
     if weights.shape != apertures.shape[1:]:
         raise ValueError(
             f"receptive field {weights.shape} does not match aperture frames {apertures.shape[1:]}"
@@ -93,10 +94,7 @@ def predict(weights: FloatArray, apertures: FloatArray) -> FloatArray:
 def design_matrix(
     fields: list[GaussianReceptiveField], grid: Grid, apertures: FloatArray
 ) -> FloatArray:
-    """Stack predicted timecourses for a set of candidate fields, one column each.
-
-    Provided for callers that score many candidates against one set of activations.
-    :class:`~cortexprobe.prf.fit.PRFFitter` builds the equivalent stack inline in its
-    constructor, so that it can also keep the candidate list beside it.
-    """
+    """Stack predicted timecourses, one column per candidate field."""
+    if not fields:
+        raise ValueError("design matrix requires at least one candidate field")
     return np.column_stack([predict(field.weights(grid), apertures) for field in fields])

@@ -1,8 +1,4 @@
-"""Visual field coordinate system.
-
-Stimuli and receptive fields must agree on where the centre of gaze is and which way is up,
-or a fitted pRF position means nothing. Both sides take their coordinates from :class:`Grid`.
-"""
+"""Pixel coordinates shared by apertures and receptive fields."""
 
 from __future__ import annotations
 
@@ -16,16 +12,16 @@ from .arrays import BoolArray, FloatArray
 
 @dataclass(frozen=True)
 class Grid:
-    """A square visual field sampled on a pixel lattice.
+    """Square pixel lattice centered at the origin, with x rightward and y upward.
 
-    The origin sits at the geometric centre of the field. Coordinates are in pixels, x
-    increasing rightward and y increasing upward, so a fitted ``y0`` reads the way a person
-    would expect rather than the way image arrays are indexed.
+    Array rows run downward; ``field_mask`` selects the inscribed circular field.
     """
 
     resolution: int
 
     def __post_init__(self) -> None:
+        if not isinstance(self.resolution, int) or isinstance(self.resolution, bool):
+            raise ValueError("grid resolution must be an integer")
         if self.resolution < 2:
             raise ValueError("grid resolution must be at least 2")
 

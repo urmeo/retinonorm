@@ -1,12 +1,7 @@
-"""Two-stage pRF fitting with parameter uncertainty.
+"""Coarse-grid pRF search, nonlinear refinement, and local parameter uncertainty.
 
-A coarse grid picks the basin, then nonlinear refinement finds the minimum inside it. Grid
-search alone resolves position no better than its own spacing; refinement alone settles into
-whichever local minimum happens to be nearest the starting point.
-
-Amplitude and baseline are never searched. At every trial position they are solved in closed
-form by linear least squares, so the nonlinear optimiser only ever explores three parameters:
-``x0``, ``y0``, ``sigma``.
+The optimizer searches x0, y0, and sigma. Linear least squares projects amplitude and baseline
+at every trial geometry.
 """
 
 from __future__ import annotations
@@ -33,13 +28,8 @@ FITTED_PARAMETERS = ("x0", "y0", "sigma")
 # A fitted value this close to its search bound is reported as pinned rather than estimated.
 BOUND_TOLERANCE = 1e-3
 
-# Fraction of its unit volume a Gaussian must retain inside the sampled field for its overlap
-# with an aperture to be a measurement rather than an artefact of truncation.
-#
-# The radial mass of a 2-D Gaussian within 3 sigma is 1 - exp(-4.5) = 0.9889, which is *under*
-# this tolerance -- the familiar 99-per-cent-within-3-sigma figure is the one-dimensional one.
-# With the field radius at resolution / 2, the tolerance is met while sigma stays under about
-# resolution / 6.1. A sigma of exactly resolution / 6 is rejected, by a small margin.
+# Minimum sampled circular-field mass for a centered Gaussian at the sigma ceiling.
+# Off-center fields can retain less mass. This is a numerical design limit.
 MIN_ON_GRID_VOLUME = 0.99
 
 # Ratio of field resolution to the largest sigma that still clears MIN_ON_GRID_VOLUME. Measured
@@ -49,13 +39,9 @@ RESOLUTION_PER_SIGMA = 6.1
 
 @dataclass(frozen=True)
 class UnitFit:
-    """The fitted pRF for one unit, with the uncertainty of its parameters.
+    """One fitted unit and its uncertainty.
 
-    ``converged`` and :attr:`accepted` answer different questions and must not be conflated.
-    ``converged`` is the optimiser's own report: did the search terminate successfully?
-    :attr:`accepted` is the scientific question: should this unit be reported as a pRF at all?
-    A fit can converge cleanly onto an answer that explains almost no variance, and a rejected
-    unit is not evidence that the numerics failed.
+    Convergence reports optimizer termination; acceptance applies the reporting criteria.
     """
 
     x0: float
@@ -70,21 +56,9 @@ class UnitFit:
     se_y0: float = float("nan")
     se_sigma: float = float("nan")
     second_field_r2: float = float("nan")
-    """Variance a second receptive field would explain on top of this one.
+    """Incremental R2 from an additional candidate field, a misspecification diagnostic.
 
-    A single Gaussian cannot represent a unit driven by two separated lobes. It settles on one
-    of them, reports a sigma belonging to neither, and nothing else in this record would show
-    it. Multi-peaked spatial tuning is common in the deeper layers this project intends to
-    tap, so a misspecified fit there would be a plausible-looking wrong pRF.
-
-    Measured on a four-direction bar sweep at 64 px, across noise from 0 to 80 per cent: a
-    genuine single-Gaussian unit stays in 0.000-0.023, pure noise reaches 0.056, and two-lobe
-    units span 0.206-0.473. The separation is wide at low noise and narrows at high noise --
-    the weakest two-lobe case is only about four times the pure-noise level -- so a fixed cut
-    near 0.1 separates them here but should not be assumed to transfer.
-
-    It is reported rather than enforced: acceptance does not depend on it, so downstream
-    analysis chooses its own cut and states it.
+    This is reported without an acceptance cutoff; downstream analysis must justify its cut.
     """
     x0_at_bound: bool = False
     y0_at_bound: bool = False
@@ -111,21 +85,10 @@ class UnitFit:
 
     @property
     def accepted(self) -> bool:
-        """Whether this unit should be reported as a measured pRF.
+        """Converged above the R2 threshold, with positive beta and unpinned sigma.
 
-        A pRF sitting at the edge of the visual field is a real measurement -- receptive
-        fields do lie near the field boundary -- so ``x0`` or ``y0`` at a bound is not
-        disqualifying. A sigma pinned against *either* end of its search range is different:
-        it says the true size lies outside the range that was searched, so the reported value
-        records where the search stopped rather than what the data support. Both ends count --
-        a pRF driven to the floor is as unmeasured as one driven to the ceiling.
-
-        A negative ``beta`` is disqualifying too. The amplitude is solved by unconstrained
-        least squares, so a unit whose response *falls* when the aperture covers a location
-        fits a perfect pRF there with the sign flipped. That is a suppressed unit, not a
-        receptive field, and surround suppression and normalisation both produce them in a
-        real network. Reported as an ordinary pRF it would contaminate every downstream
-        size-versus-depth regression and lesion contrast.
+        Either sigma bound disqualifies a size estimate. Center bounds, undefined uncertainty,
+        and the second-field diagnostic do not alter this policy. Negative beta is suppression.
         """
         return (
             self.converged
@@ -135,11 +98,10 @@ class UnitFit:
         )
 
     def confidence_interval(self, parameter: str, level: float = 0.95) -> tuple[float, float]:
-        """Two-sided interval for one parameter from the linearised covariance.
+        """Two-sided interval from local linear covariance and a Student-t critical value.
 
-        The interval assumes the residuals are approximately Gaussian and the model is locally
-        linear at the solution. It is a summary of fit precision, not a guarantee of coverage
-        under model misspecification.
+        Approximately Gaussian residuals and local linearity are assumed. Model error can
+        invalidate coverage; unidentifiable parameters have undefined intervals.
         """
         if parameter not in FITTED_PARAMETERS:
             raise ValueError(f"parameter must be one of {FITTED_PARAMETERS}; got {parameter!r}")
@@ -169,24 +131,15 @@ def _r_squared(response: FloatArray, fitted: FloatArray) -> float:
 
 
 def _even_at_least(value: float) -> int:
-    """Smallest even integer at or above ``value``.
-
-    Both halves of the sigma-ceiling message have to name a figure the caller can actually use:
-    rounding to nearest can land under the requirement, and an odd resolution is rejected
-    outright by :class:`~cortexprobe.config.StimulusConfig`.
-    """
+    """Smallest even integer at or above value, for valid stimulus-resolution advice."""
     return 2 * math.ceil(value / 2)
 
 
 def _count_distinct_frames(apertures: FloatArray) -> int:
-    """Frames carrying information the rest do not.
+    """Count distinct aperture frames for residual degrees of freedom.
 
-    A design can present the same aperture twice: without an haemodynamic response a bar
-    sweep and its 180 degree return are bit-identical, so the default eight-direction stimulus
-    shows every frame exactly twice. A duplicate contributes a second copy of its own residual
-    and its own Jacobian rows. Those copies cancel out of the fitted parameters but not out of
-    the degrees of freedom, so counting them would shrink every standard error as though a
-    genuinely independent observation had been made.
+    Exact stimulus copies repeat Jacobian rows and residuals. Counting them as independent
+    observations would shrink errors despite adding no distinct stimulus positions.
     """
     flat = apertures.reshape(len(apertures), -1)
     return len({row.tobytes() for row in flat})
@@ -195,21 +148,42 @@ def _count_distinct_frames(apertures: FloatArray) -> int:
 def _standard_errors(
     jacobian: FloatArray, cost: float, n_independent: int
 ) -> tuple[float, float, float]:
-    """Linearised standard errors from the Jacobian at the solution.
+    """Linearised errors for a finite, full-rank three-parameter Jacobian.
 
-    ``cov = residual_variance * (J^T J)^-1`` is the usual Gauss-Newton approximation. The
-    pseudo-inverse is used because a pRF sitting outside the stimulated field can make
-    ``J^T J`` singular, and that case should yield undefined errors rather than an exception.
+    Singular directions are unidentifiable and return undefined errors. A pseudoinverse alone
+    would instead assign zero variance to an unobserved direction.
 
     ``n_independent`` counts distinct frames, while ``cost`` and ``jacobian`` still cover every
     frame presented. With ``k`` copies of each frame both ``cost`` and ``J^T J`` scale by ``k``
     and the factors cancel, leaving the covariance a duplicate-free stimulus would have given.
     """
+    if (
+        jacobian.ndim != 2
+        or jacobian.shape[1] != len(FITTED_PARAMETERS)
+        or not np.isfinite(jacobian).all()
+        or not np.isfinite(cost)
+        or cost < 0.0
+        or not isinstance(n_independent, int)
+        or isinstance(n_independent, bool)
+        or n_independent > len(jacobian)
+    ):
+        return (float("nan"),) * 3
     dof = n_independent - N_PARAMETERS
     if dof <= 0:
         return (float("nan"),) * 3
-    residual_variance = 2.0 * cost / dof
-    covariance = residual_variance * np.linalg.pinv(jacobian.T @ jacobian)
+    try:
+        if np.linalg.matrix_rank(jacobian) < len(FITTED_PARAMETERS):
+            return (float("nan"),) * 3
+        information = jacobian.T @ jacobian
+        if not np.isfinite(information).all():
+            return (float("nan"),) * 3
+        singular_values = np.linalg.svd(information, compute_uv=False)
+        if singular_values[-1] <= 1e-15 * singular_values[0]:
+            return (float("nan"),) * 3
+        residual_variance = 2.0 * cost / dof
+        covariance = residual_variance * np.linalg.pinv(information)
+    except np.linalg.LinAlgError:
+        return (float("nan"),) * 3
     variances = np.diag(covariance)
     if not np.all(np.isfinite(variances)) or np.any(variances < 0.0):
         return (float("nan"),) * 3
@@ -218,12 +192,7 @@ def _standard_errors(
 
 
 class PRFFitter:
-    """Fits Gaussian pRFs to activation timecourses recorded under a known aperture sequence.
-
-    The candidate predictions are built once per fitter because they depend only on the
-    stimulus, not on the unit being fitted. Rebuilding them per unit would repeat identical
-    work for every unit in a layer.
-    """
+    """Fit Gaussian pRFs using candidate predictions cached for the aperture sequence."""
 
     def __init__(self, grid: Grid, apertures: FloatArray, config: FitConfig) -> None:
         if apertures.ndim != 3:
@@ -235,9 +204,7 @@ class PRFFitter:
                 f"need more than {N_PARAMETERS} frames to fit a pRF; got {len(apertures)}"
             )
         if not np.isfinite(apertures).all():
-            # Non-finite apertures poison every candidate prediction built below, so each
-            # subsequent fit either returns a NaN pRF or dies inside LAPACK with an error that
-            # names neither the aperture nor the frame. Refuse here, where the cause is visible.
+            # Reject before building candidate predictions or entering LAPACK.
             raise ValueError("apertures must be finite; found NaN or inf")
         self.grid = grid
         self.apertures = apertures.astype(np.float64, copy=False)
@@ -250,18 +217,10 @@ class PRFFitter:
         )
 
     def _check_sigma_ceiling(self) -> None:
-        """Reject a sigma ceiling this grid cannot represent.
+        """Check sampled circular-field mass at the centered sigma ceiling.
 
-        :class:`~cortexprobe.config.FitConfig` already refuses a lower bound under one pixel,
-        because a Gaussian narrower than the pixel pitch is under-sampled and silently loses
-        its unit volume. The same failure occurs at the other end of the range, by truncation
-        rather than under-sampling, and it is the more dangerous of the two: the missing
-        volume grows with sigma, so the bias runs against large pRFs. That is precisely the
-        axis along which pRF size is compared across depth, so an unguarded ceiling would
-        push a headline result in a consistent direction for a reason that is pure geometry.
-
-        Only the fitter can make this check. The bound comes from the fit configuration and
-        the field size from the grid, and neither knows about the other on its own.
+        Permitted off-center fields can still be truncated. Free beta absorbs scalar
+        normalization differences; this guard does not establish a size-versus-depth bias.
         """
         _, sigma_high = self.config.sigma_bounds
         weights = GaussianReceptiveField(0.0, 0.0, sigma_high).weights(self.grid)
@@ -270,9 +229,8 @@ class PRFFitter:
             raise ConfigError(
                 f"upper sigma bound {sigma_high:g} px keeps only {volume:.3f} of its unit "
                 f"volume inside a {self.grid.resolution} px field, under the "
-                f"{MIN_ON_GRID_VOLUME} tolerance. A Gaussian this wide relative to the field "
-                "is truncated, so its overlap with an aperture understates the true value by "
-                "an amount that grows with sigma. Lower the bound to about "
+                f"{MIN_ON_GRID_VOLUME} tolerance for a centered Gaussian. "
+                "This exceeds the sampled-mass design limit. Lower the bound to about "
                 f"{math.floor(self.grid.resolution / RESOLUTION_PER_SIGMA)} px, or raise the "
                 f"grid resolution to about {_even_at_least(sigma_high * RESOLUTION_PER_SIGMA)} px."
             )
@@ -283,7 +241,7 @@ class PRFFitter:
 
     @property
     def bounds(self) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
-        """Search box: centres stay inside the field, sigma inside its configured range."""
+        """Square search box for centers, with the configured sigma range."""
         radius = self.grid.radius
         sigma_low, sigma_high = self.config.sigma_bounds
         return (-radius, -radius, sigma_low), (radius, radius, sigma_high)
@@ -317,12 +275,9 @@ class PRFFitter:
         return pinned[0], pinned[1], pinned[2]
 
     def _second_field_r2(self, response: FloatArray, fitted: FloatArray) -> float:
-        """Largest R2 a second candidate pRF would add to the fitted one.
+        """Largest incremental R2 from a cached candidate after orthogonalization.
 
-        This is the R2 gain from a two-Gaussian alternative, but in closed form. Every
-        candidate prediction is already built, so each is orthogonalised against the fitted
-        prediction and the intercept, and its incremental R2 read off directly. No second
-        nonlinear search runs, which keeps per-unit cost flat.
+        Project candidates against the fitted prediction and intercept; no second search runs.
         """
         total = float(np.sum((response - response.mean()) ** 2))
         if total <= 0.0:

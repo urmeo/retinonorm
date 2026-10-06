@@ -9,6 +9,7 @@ that identifies a run would not identify it.
 from __future__ import annotations
 
 import json
+import math
 
 import pytest
 
@@ -205,3 +206,70 @@ def test_saved_configuration_is_readable_json(tmp_path) -> None:
 
     assert set(payload) == {"stimulus", "model", "fit", "seed"}
     assert path.read_text().endswith("\n")
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+@pytest.mark.parametrize("index", [0, 1])
+def test_sigma_bounds_must_be_finite(bad, index) -> None:
+    bounds = [1.0, 10.0]
+    bounds[index] = bad
+    with pytest.raises(ConfigError, match="sigma bound must be finite"):
+        FitConfig(sigma_bounds=tuple(bounds))
+
+
+@pytest.mark.parametrize("bounds", [(), (1.0,), (1.0, 10.0, 20.0), None])
+def test_sigma_bounds_require_exactly_two_entries(bounds) -> None:
+    with pytest.raises(ConfigError, match="exactly two"):
+        FitConfig(sigma_bounds=bounds)
+
+
+@pytest.mark.parametrize("bad", [3.5, math.nan, math.inf, True])
+@pytest.mark.parametrize(
+    ("section", "field"),
+    [
+        (StimulusConfig, "resolution"),
+        (StimulusConfig, "n_steps"),
+        (FitConfig, "grid_size"),
+        (FitConfig, "max_nfev"),
+        (ModelConfig, "pool_to"),
+        (ModelConfig, "weights_seed"),
+        (RunConfig, "seed"),
+    ],
+)
+def test_counts_and_seeds_require_integers(section, field, bad) -> None:
+    with pytest.raises(ConfigError, match="integer"):
+        section(**{field: bad})
+
+
+@pytest.mark.parametrize(("section", "field"), [(RunConfig, "seed"), (ModelConfig, "weights_seed")])
+def test_seeds_must_be_nonnegative(section, field) -> None:
+    with pytest.raises(ConfigError, match="nonnegative"):
+        section(**{field: -1})
+
+
+@pytest.mark.parametrize("section", [StimulusConfig, ModelConfig, FitConfig, RunConfig])
+def test_config_sections_require_objects(section) -> None:
+    with pytest.raises(ConfigError, match="object"):
+        section.from_dict(None)
+
+
+def test_invalid_nested_sections_and_containers_raise_config_errors() -> None:
+    with pytest.raises(ConfigError, match="invalid container"):
+        StimulusConfig.from_dict({"directions": None})
+    with pytest.raises(ConfigError, match="StimulusConfig"):
+        RunConfig(stimulus=None)
+    with pytest.raises(ConfigError, match="tap layers"):
+        ModelConfig(layers=("",))
+    with pytest.raises(ConfigError, match="integer"):
+        StimulusConfig(directions=(0, math.nan))
+
+
+def test_unrepresentable_numeric_setting_is_a_config_error() -> None:
+    with pytest.raises(ConfigError, match="finite"):
+        FitConfig(sigma_bounds=(1.0, 10**400))
+
+
+def test_existing_list_containers_remain_usable() -> None:
+    assert StimulusConfig(directions=[0, 90]).n_bar_frames == 64
+    assert ModelConfig(layers=["features.2"]).layers == ["features.2"]
+    assert FitConfig(sigma_bounds=[1.0, 10.0]).sigma_bounds == [1.0, 10.0]

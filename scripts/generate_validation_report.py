@@ -1,28 +1,11 @@
-"""Regenerate every number quoted in README.md.
+"""Measure the recorded synthetic validation tables in README.md.
 
-BUILD_SPEC section 12.5 requires that no number appear in any document that was not produced
-by a recorded run. This script is that record. It runs each measurement the README reports and
-writes both a machine-readable ``results/validation.json`` and the exact Markdown tables in
-``results/VALIDATION.md``, then splices those tables into README.md between marker comments so
-the two cannot drift apart.
+Load configs/validation.json, write outputs/validation.json and splice the four marked README
+tables. --check compares deterministic measurements within tolerance and verifies those tables,
+without writing files. It does not check supplemental figure pixels or remeasure timings.
 
-Every table carries the environment it was produced in and the digest of the configuration
-that produced it. The recorded date is preserved when a rerun reproduces the same numbers, so
-that regenerating on an unchanged tree is a no-op and CI can diff the committed copy.
-
-Run with no arguments::
-
-    python3 scripts/generate_validation_report.py
-
-Every measurement except the runtime table is deterministic, and reproduces byte for byte
-across Python 3.9 to 3.12 and across NumPy and SciPy versions, so a rerun on an unchanged tree
-rewrites the same bytes and ``git diff --exit-code results/`` passes anywhere.
-
-Timings are not reproducible by nature, and the machine they were taken on is part of what they
-mean. Both the runtime table and the recorded environment are therefore carried forward unless
-``--runtime`` asks for fresh ones. Refresh them deliberately, on a machine whose details you are
-willing to publish in the footer. When the numbers reproduce somewhere other than the recorded
-environment, the script says so: that is evidence of portability, not a discrepancy.
+Reproduced values retain their original numbers, date and environment. --runtime explicitly
+refreshes hardware timings, recording their provenance separately when needed.
 """
 
 from __future__ import annotations
@@ -41,7 +24,7 @@ from typing import Any
 import numpy as np
 import scipy
 
-from cortexprobe.config import FitConfig, ModelConfig, RunConfig, StimulusConfig
+from cortexprobe.config import RunConfig
 from cortexprobe.geometry import Grid
 from cortexprobe.prf.fit import PRFFitter
 from cortexprobe.prf.model import GaussianReceptiveField, predict
@@ -49,15 +32,10 @@ from cortexprobe.prf.validation import CrossValidator
 from cortexprobe.stimuli import build_apertures
 
 ROOT = Path(__file__).resolve().parent.parent
-RESULTS = ROOT / "results"
+OUTPUTS = ROOT / "outputs"
 
 # The configuration every measurement below is made under. Recorded by digest in the output.
-CONFIG = RunConfig(
-    stimulus=StimulusConfig(resolution=64, n_steps=20, directions=(0, 45, 90, 135)),
-    model=ModelConfig(),
-    fit=FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0)),
-    seed=0,
-)
+CONFIG = RunConfig.load(ROOT / "configs" / "validation.json")
 
 GROUND_TRUTH = [
     (0.0, 0.0, 5.0),
@@ -276,9 +254,9 @@ def current_environment() -> dict[str, str]:
     }
 
 
-def footer(environment: dict[str, str], digest: str, generated: str) -> str:
+def footer(environment: dict[str, str], digest: str, generated: str, note: str = "") -> str:
     return (
-        f"<sub>Recorded on {environment['platform']} {environment['machine']}, "
+        f"<sub>{note} Recorded on {environment['platform']} {environment['machine']}, "
         f"Python {environment['python']}, NumPy {environment['numpy']}, "
         f"SciPy {environment['scipy']} | config digest `{digest[:12]}` | "
         f"generated {generated}</sub>"
@@ -287,7 +265,6 @@ def footer(environment: dict[str, str], digest: str, generated: str) -> str:
 
 def render(report: dict[str, Any]) -> dict[str, str]:
     """One Markdown block per README section, keyed by its marker name."""
-    line = footer(report["environment"], report["config_digest"], report["generated"])
     blocks = {}
 
     recovery = report["recovery"]
@@ -306,14 +283,16 @@ def render(report: dict[str, Any]) -> dict[str, str]:
         f"| Condition | Position error, largest (px) | mean (px) | "
         f"Sigma error, largest (%) | mean (%) | Minimum R² |\n"
         f"|---|---|---|---|---|---|\n{rows}\n"
-        f"| Pure noise | — | — | — | — | "
+        f"| Pure noise | n/a | n/a | n/a | n/a | "
         f"**{noise['rejected']} / {noise['n_units']} rejected** |\n\n"
-        f"Largest and mean are over n = {recovery['rows'][0]['n']} ground-truth pRFs sharing a "
-        f"single noise realisation, so the largest is one draw and not a worst case: across 50 "
-        f"fresh seeds the 50 % row averages 0.83 px and reaches 2.81 px. On pure noise the fitter "
-        f"accepted none of {noise['n_units']} units at this seed, its best spurious R² being "
-        f"{noise['best_r2']:.4f} against the {noise['threshold']} threshold; over n = 4000 the "
-        f"acceptance rate is 0.27 %.\n\n{line}"
+        + footer(
+            report["environment"],
+            report["config_digest"],
+            report["generated"],
+            f"n = {recovery['rows'][0]['n']}, shared noise seed {RECOVERY_SEED}; pure noise "
+            f"{noise['n_units'] - noise['rejected']}/{noise['n_units']} accepted "
+            f"(best R² {noise['best_r2']:.4f}, threshold {noise['threshold']}).",
+        )
     )
 
     uncertainty = report["uncertainty"]
@@ -328,14 +307,15 @@ def render(report: dict[str, Any]) -> dict[str, str]:
     )
     blocks["uncertainty"] = (
         f"| Noise | Fitted x0 | SE | 95 % CI width |\n|---|---|---|---|\n{rows}\n\n"
-        f"The noiseless row is a numerical floor, not a measurement: the residual is at machine "
-        f"precision, so the linearised interval collapses. It is shown to make the scaling of the "
-        f"rows below it legible.\n\n"
-        f"Empirical coverage of the nominal {uncertainty['nominal']:.0%} interval:\n\n"
-        f"| Position | Noise | n | Coverage | 95 % binomial CI |\n|---|---|---|---|---|\n"
+        f"| Position | Noise | n | Coverage | 95 % Wald CI |\n|---|---|---|---|---|\n"
         f"{coverage}\n\n"
-        f"Coverage runs slightly under nominal, and lowest near the field edge at high noise, "
-        f"where the linearisation behind the interval is weakest.\n\n{line}"
+        + footer(
+            report["environment"],
+            report["config_digest"],
+            report["generated"],
+            f"Nominal {uncertainty['nominal']:.0%}; paired seeds across cells; "
+            "noiseless SE is a numerical floor.",
+        )
     )
 
     cv = report["cross_validation"]
@@ -349,10 +329,14 @@ def render(report: dict[str, Any]) -> dict[str, str]:
     blocks["cross_validation"] = (
         f"| Response | n seeds | Grouped CV | Random-split CV | Leak | Leak positive |\n"
         f"|---|---|---|---|---|---|\n{rows}\n\n"
-        f"Mean ± SD over seeds {cv['seeds'][0]}–{cv['seeds'][-1]}. The carrier is a width-"
-        f"{cv['kernel_width']} boxcar, whose lag-1 autocorrelation measured "
-        f"{cv['lag1_mean']:.3f} ± {cv['lag1_sd']:.3f} against a theoretical "
-        f"{cv['lag1_theoretical']:.3f}.\n\n{line}"
+        + footer(
+            report["environment"],
+            report["config_digest"],
+            report["generated"],
+            f"Mean ± SD, seeds {cv['seeds'][0]}-{cv['seeds'][-1]}; width-"
+            f"{cv['kernel_width']} boxcar lag-1 {cv['lag1_mean']:.3f} ± "
+            f"{cv['lag1_sd']:.3f} (theory {cv['lag1_theoretical']:.3f}).",
+        )
     )
 
     runtime = report["runtime"]
@@ -361,37 +345,18 @@ def render(report: dict[str, Any]) -> dict[str, str]:
         f"{r['cv_seconds']:.3f} | {r['cv_factor']:.1f}× |"
         for r in runtime["rows"]
     )
-    largest = runtime["rows"][-1]
     blocks["runtime"] = (
         f"| Units | Fit (s) | Per unit (ms) | CV (s) | CV factor |\n|---|---|---|---|---|\n"
         f"{rows}\n\n"
-        f"Per-unit cost is flat, so nothing quadratic hides in the loop. Cross-validation costs a "
-        f"roughly constant factor: {runtime['n_folds']} folds plus the full fit. On this machine "
-        f"10 000 units extrapolate to about "
-        f"{largest['per_unit_ms'] * 10_000 / 60_000:.1f} minutes single-threaded. Timings are "
-        f"hardware-specific; the environment is recorded below.\n\n{line}"
+        + footer(
+            report.get("runtime_environment", report["environment"]),
+            report.get("runtime_config_digest", report["config_digest"]),
+            report.get("runtime_generated", report["generated"]),
+            f"Hardware timings; {runtime['n_folds']} folds plus the full fit; "
+            "not remeasured by --check.",
+        )
     )
     return blocks
-
-
-SECTIONS = [
-    ("recovery", "Recovery of known pRFs"),
-    ("uncertainty", "Parameter uncertainty"),
-    ("cross_validation", "Cross-validation and leakage"),
-    ("runtime", "Runtime"),
-]
-
-
-def validation_markdown(blocks: dict[str, str]) -> str:
-    sections = "\n\n".join(f"## {title}\n\n{blocks[name]}" for name, title in SECTIONS)
-    return (
-        "# Validation report\n\n"
-        "Generated by `scripts/generate_validation_report.py`. Do not edit by hand.\n\n"
-        "**These validate the instrument, not any scientific claim.** No network has been "
-        "probed. A frozen ImageNet-trained CNN is not a biologically realistic model of visual "
-        "cortex; this project builds the measurement apparatus, and does not claim otherwise.\n\n"
-        f"{sections}\n"
-    )
 
 
 def splice(text: str, blocks: dict[str, str]) -> str:
@@ -410,14 +375,7 @@ def splice(text: str, blocks: dict[str, str]) -> str:
 
 
 def rounded(value: Any, places: int = 6) -> Any:
-    """Round every float in the report to a fixed number of decimal places.
-
-    Measurements reproduce across Python, NumPy and SciPy versions to about ten significant
-    figures; the last few bits differ with the BLAS underneath. Full float64 precision in the
-    artifact would therefore record noise as if it were signal, and would make a byte
-    comparison of the committed report fail for no reason that matters. Six decimal places is
-    two orders finer than anything the tables display and four orders coarser than the drift.
-    """
+    """Record six decimal places; the README tables display fewer places."""
     if isinstance(value, (bool, int)):
         return value
     if isinstance(value, float):
@@ -430,13 +388,7 @@ def rounded(value: Any, places: int = 6) -> Any:
 
 
 def drifted(recorded: Any, fresh: Any, path: str = "") -> list[str]:
-    """Where a freshly measured report departs from the committed one, beyond tolerance.
-
-    A byte comparison of float measurements is the wrong instrument across environments: the
-    last few bits move with the BLAS underneath, and a gate that fails for that reason teaches
-    everyone to ignore it. The tolerance here is far tighter than any number the tables show
-    and far looser than the observed drift, so a failure means a real change.
-    """
+    """Find changes exceeding relative 1e-5 or absolute 1e-6 float tolerance."""
     if isinstance(recorded, dict) and isinstance(fresh, dict):
         problems = []
         for key in sorted(set(recorded) | set(fresh)):
@@ -462,9 +414,17 @@ def drifted(recorded: Any, fresh: Any, path: str = "") -> list[str]:
     return []
 
 
-def numbers_only(report: dict[str, Any]) -> str:
-    """The report without its date, for deciding whether anything actually moved."""
-    return json.dumps({k: v for k, v in report.items() if k != "generated"}, sort_keys=True)
+def measurements(report: dict[str, Any]) -> dict[str, Any]:
+    """Deterministic measurements, excluding date and hardware provenance."""
+    ignored = {
+        "runtime",
+        "environment",
+        "generated",
+        "runtime_environment",
+        "runtime_generated",
+        "runtime_config_digest",
+    }
+    return {key: value for key, value in report.items() if key not in ignored}
 
 
 def run_check(report: dict[str, Any], previous: dict[str, Any], readme: str) -> int:
@@ -473,11 +433,7 @@ def run_check(report: dict[str, Any], previous: dict[str, Any], readme: str) -> 
         print("no committed report to check against; run without --check first")
         return 1
 
-    ignored = ("runtime", "environment", "generated")
-    problems = drifted(
-        {k: v for k, v in previous.items() if k not in ignored},
-        {k: v for k, v in report.items() if k not in ignored},
-    )
+    problems = drifted(measurements(previous), measurements(report))
     if problems:
         print("measurements have drifted from the committed report:")
         for problem in problems:
@@ -491,32 +447,30 @@ def run_check(report: dict[str, Any], previous: dict[str, Any], readme: str) -> 
     if splice(readme, blocks) != readme:
         print("README.md tables do not match the committed report; rerun without --check")
         return 1
-    if (RESULTS / "VALIDATION.md").read_text() != validation_markdown(blocks):
-        print("results/VALIDATION.md does not match the committed report")
-        return 1
-
     print(
-        "every measurement reproduces within tolerance, and the committed tables match; "
+        "recorded deterministic measurements reproduce within tolerance; README tables match "
+        "(timings and figure pixels not rechecked); "
         f"recorded on {previous['environment']['platform']}, checked on "
         f"{current_environment()['platform']} Python {platform.python_version()}"
     )
     return 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Regenerate the validation report.")
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--runtime",
         action="store_true",
         help="re-measure the runtime table instead of carrying forward the recorded one",
     )
-    parser.add_argument(
+    mode.add_argument(
         "--check",
         action="store_true",
         help="verify the committed report still reproduces, writing nothing; exits non-zero "
         "if a measurement has drifted or the committed tables do not match it",
     )
-    arguments = parser.parse_args()
+    arguments = parser.parse_args(argv)
 
     readme_path = ROOT / "README.md"
     readme = readme_path.read_text()
@@ -526,7 +480,7 @@ def main() -> int:
     apertures = sequence.as_float()
     fitter = PRFFitter(grid, apertures, CONFIG.fit)
 
-    previous_path = RESULTS / "validation.json"
+    previous_path = OUTPUTS / "validation.json"
     previous = json.loads(previous_path.read_text()) if previous_path.exists() else {}
 
     report: dict[str, Any] = {
@@ -552,34 +506,43 @@ def main() -> int:
         return run_check(report, previous, readme)
 
     running_in = current_environment()
+    unchanged = bool(previous) and not drifted(measurements(previous), measurements(report))
+    if unchanged:
+        # Keep the original measured record, including differences below tolerance.
+        report.update(measurements(previous))
+    report["environment"] = previous["environment"] if unchanged else running_in
+    report["generated"] = previous["generated"] if unchanged else date.today().isoformat()
+
     refresh = arguments.runtime or "runtime" not in previous
     if refresh:
         report["runtime"] = rounded(measure_runtime(grid, apertures, sequence, fitter))
-        report["environment"] = running_in
+        if unchanged or previous:
+            report["runtime_environment"] = running_in
+            report["runtime_generated"] = date.today().isoformat()
+            report["runtime_config_digest"] = report["config_digest"]
     else:
         report["runtime"] = previous["runtime"]
-        report["environment"] = previous["environment"]
-
-    def measurements(payload: dict[str, Any]) -> str:
-        return numbers_only(dict(payload, runtime=None, environment=None))
-
-    unchanged = bool(previous) and measurements(report) == measurements(previous)
-    report["generated"] = previous.get("generated") if unchanged else date.today().isoformat()
+        if not unchanged or "runtime_environment" in previous:
+            report["runtime_environment"] = previous.get(
+                "runtime_environment", previous["environment"]
+            )
+            report["runtime_generated"] = previous.get("runtime_generated", previous["generated"])
+            report["runtime_config_digest"] = previous.get(
+                "runtime_config_digest", previous["config_digest"]
+            )
 
     blocks = render(report)
     spliced = splice(readme, blocks)  # validated before anything is written
 
-    RESULTS.mkdir(exist_ok=True)
+    OUTPUTS.mkdir(exist_ok=True)
     previous_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
-
-    (RESULTS / "VALIDATION.md").write_text(validation_markdown(blocks))
 
     readme_path.write_text(spliced)
 
-    print(f"wrote {previous_path.relative_to(ROOT)} and results/VALIDATION.md")
+    print(f"wrote {previous_path.relative_to(ROOT)}")
     state = "unchanged" if unchanged else "updated"
     timing = "re-measured" if refresh else "carried forward"
-    print(f"README tables spliced; numbers {state}, runtime and environment {timing}")
+    print(f"README tables spliced; measurements {state}, runtime {timing}")
     if unchanged and running_in != report["environment"]:
         print(
             "note: these numbers reproduced here, in a different environment than the one on "

@@ -143,28 +143,37 @@
     "n_folds": 4,
     "rows": [
       {
-        "cv_factor": 4.422425,
-        "cv_seconds": 0.036397,
-        "fit_seconds": 0.00823,
-        "per_unit_ms": 8.230166,
+        "cv_factor": 4.664503,
+        "cv_seconds": 0.039737,
+        "fit_seconds": 0.008519,
+        "per_unit_ms": 8.518959,
         "units": 1
       },
       {
-        "cv_factor": 5.198719,
-        "cv_seconds": 0.379004,
-        "fit_seconds": 0.072903,
-        "per_unit_ms": 7.290338,
+        "cv_factor": 5.01618,
+        "cv_seconds": 0.391401,
+        "fit_seconds": 0.078028,
+        "per_unit_ms": 7.802771,
         "units": 10
       },
       {
-        "cv_factor": 5.172686,
-        "cv_seconds": 3.957961,
-        "fit_seconds": 0.765165,
-        "per_unit_ms": 7.651655,
+        "cv_factor": 5.02076,
+        "cv_seconds": 3.977907,
+        "fit_seconds": 0.792292,
+        "per_unit_ms": 7.922918,
         "units": 100
       }
     ]
   },
+  "runtime_config_digest": "4d6a856a499e44d891e72b42b8d7e897bdb165e029f903bfceeecb1d9e32a5a3",
+  "runtime_environment": {
+    "machine": "arm64",
+    "numpy": "2.5.3",
+    "platform": "macOS-27.0.1",
+    "python": "3.12.13",
+    "scipy": "1.18.1"
+  },
+  "runtime_generated": "2026-10-06",
   "stimulus": {
     "candidates": 300,
     "distinct_frames": 80,

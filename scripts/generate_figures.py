@@ -1,7 +1,8 @@
 """Regenerate the figures in README.md.
 
-Every figure is drawn from the same measurements and the same configuration as
-``generate_validation_report.py``, so a figure cannot disagree with the table beside it.
+Coverage and timing panels use outputs/validation.json; other panels run supplemental
+synthetic diagnostics. A matching configuration digest is required. Run the report's
+--check first to verify recorded numbers; it does not compare figure pixels.
 Needs the ``viz`` extra::
 
     python3 -m pip install -e '.[viz]'
@@ -10,6 +11,7 @@ Needs the ``viz`` extra::
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -27,9 +29,9 @@ from generate_validation_report import (
     CONFIG,
     CV_SEEDS,
     GROUND_TRUTH,
+    OUTPUTS,
     RECOVERY_NOISE,
     RECOVERY_SEED,
-    RESULTS,
     SPLIT_SEED,
     UNCERTAINTY_NOISE,
     UNCERTAINTY_SEED,
@@ -44,7 +46,7 @@ from cortexprobe.prf.model import GaussianReceptiveField, predict
 from cortexprobe.prf.validation import CrossValidator
 from cortexprobe.stimuli import build_apertures, frame_similarity
 
-FIGURES = Path(__file__).resolve().parent.parent / "docs" / "figures"
+FIGURES = OUTPUTS
 INK = "#1b1f23"
 ACCENT = "#2f6f9f"
 WARN = "#b4442e"
@@ -77,6 +79,24 @@ def worst_cross_group_similarity(apertures, groups) -> float:
         if len(train):
             worst = max(worst, float(similarity[np.ix_(test, train)].max(axis=1).max()))
     return worst
+
+
+def load_recorded_report() -> dict:
+    """Reject absent or stale validation records before drawing figures."""
+    path = OUTPUTS / "validation.json"
+    try:
+        report = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"cannot read {path}; generate the validation report first") from error
+    if not isinstance(report, dict) or report.get("config_digest") != CONFIG.digest():
+        raise ValueError("validation config digest is stale; regenerate the report first")
+    return report
+
+
+def pixel_coordinates(grid: Grid, x0: float, y0: float) -> tuple[float, float]:
+    """Convert upward-y field coordinates to imshow's column and downward row."""
+    origin = (grid.resolution - 1) / 2
+    return x0 + origin, origin - y0
 
 
 def figure_stimulus() -> None:
@@ -147,7 +167,7 @@ def figure_fold_leakage() -> None:
     axis.set_xticklabels(labels)
     axis.set_ylim(0, 1.15)
     axis.set_ylabel("worst held-out ↔ training\ncosine similarity")
-    axis.set_title("A held-out frame must not resemble a training frame")
+    axis.set_title("Cross-group frame similarity")
     axis.legend(frameon=False, fontsize=8, ncol=3, loc="upper center")
     fig.tight_layout()
     fig.savefig(FIGURES / "fold-leakage.png", dpi=150)
@@ -195,7 +215,7 @@ def figure_recovery() -> None:
             lw=2.2,
             color=WARN,
             zorder=3,
-            label="worst of 5",
+            label="largest of 5",
         )
         axis.plot(
             noise_pct,
@@ -229,7 +249,7 @@ def figure_recovery() -> None:
         axis.grid(axis="y", color="#eef1f4", lw=1)
         axis.set_axisbelow(True)
     axes[0].legend(frameon=False, fontsize=8, loc="upper left")
-    fig.suptitle("Accuracy degrades gracefully with noise", fontsize=11, fontweight="bold")
+    fig.suptitle("Recovery error: 5 synthetic fields", fontsize=11, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.92))
     fig.savefig(FIGURES / "recovery.png", dpi=150)
     plt.close(fig)
@@ -269,9 +289,7 @@ def figure_leakage() -> None:
             f"{int((np.asarray(split) > np.asarray(honest)).sum())}/{len(CV_SEEDS)} positive"
         )
     axes[0].set_ylabel("held-out R²")
-    fig.suptitle(
-        "A random frame split inflates the score on temporally correlated noise", fontsize=10
-    )
+    fig.suptitle("Grouped and random-split validation: 20 noise seeds", fontsize=10)
     fig.tight_layout(rect=(0, 0, 1, 0.92))
     fig.savefig(FIGURES / "leakage.png", dpi=150)
     plt.close(fig)
@@ -347,16 +365,16 @@ def figure_model() -> None:
 
 
 def figure_sigma_guard() -> None:
-    """Unit volume against sigma, with both guarded ends marked."""
+    """Centered-field truncation and subpixel sampling diagnostics."""
     fig, axes = plt.subplots(1, 2, figsize=(8.8, 3.4))
 
-    grid = Grid(64)
+    grid = Grid(CONFIG.stimulus.resolution)
     sigmas = np.linspace(0.1, 30.0, 220)
     volume = [
         float(GaussianReceptiveField(0.0, 0.0, float(s)).weights(grid)[grid.field_mask].sum())
         for s in sigmas
     ]
-    ceiling = 64 / RESOLUTION_PER_SIGMA
+    ceiling = grid.resolution / RESOLUTION_PER_SIGMA
     axes[0].axvspan(0, 1.0, color=WARN, alpha=0.10)
     axes[0].axvspan(ceiling, 30, color=WARN, alpha=0.10)
     axes[0].plot(sigmas, volume, color=ACCENT, lw=2.2, zorder=3)
@@ -389,11 +407,11 @@ def figure_sigma_guard() -> None:
         color=WARN,
         rotation=90,
     )
-    axes[0].set_xlabel(r"$\sigma$ (px) on a 64 px field")
+    axes[0].set_xlabel(rf"$\sigma$ (px) on a {grid.resolution} px field")
     axes[0].set_ylabel("unit volume retained on grid")
     axes[0].set_ylim(0, 1.12)
     axes[0].set_xlim(0, 30)
-    axes[0].set_title("Truncated by the field above the ceiling")
+    axes[0].set_title("Centered Gaussian on a finite field")
 
     offsets = np.linspace(0.0, 0.5, 60)
     sums = [float(GaussianReceptiveField(float(o), 0.0, 0.2).weights(grid).sum()) for o in offsets]
@@ -432,9 +450,7 @@ def figure_sigma_guard() -> None:
     for axis in axes:
         axis.grid(axis="y", color="#eef1f4", lw=1)
         axis.set_axisbelow(True)
-    fig.suptitle(
-        "Unit volume survives only between the two guards", fontsize=11.5, fontweight="bold"
-    )
+    fig.suptitle("Sampling and centered-field limits", fontsize=11.5, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.91))
     fig.savefig(FIGURES / "sigma-guard.png", dpi=150)
     plt.close(fig)
@@ -456,7 +472,7 @@ def figure_uncertainty() -> None:
         errors.append(fit.se_x0)
         widths.append(high - low)
 
-    report = json.loads((RESULTS / "validation.json").read_text())
+    report = load_recorded_report()
     coverage = report["uncertainty"]["coverage"]
 
     fig, axes = plt.subplots(1, 2, figsize=(8.8, 3.4))
@@ -517,7 +533,7 @@ def figure_uncertainty() -> None:
         axis.grid(axis="y", color="#eef1f4", lw=1)
         axis.set_axisbelow(True)
     fig.suptitle(
-        "Every estimate carries an error bar, and the bars are checked",
+        "Local uncertainty and empirical coverage",
         fontsize=11.5,
         fontweight="bold",
     )
@@ -566,13 +582,13 @@ def figure_misspecification() -> None:
     axes[0].imshow(lobes_near, cmap="magma", interpolation="nearest")
     fit = fitter.fit_unit(response(lobes_near, 0.0, 7))
     circle = plt.Circle(
-        (fit.x0 + grid.radius, fit.y0 + grid.radius), fit.sigma, fill=False, color=GOOD, lw=2
+        pixel_coordinates(grid, fit.x0, fit.y0), fit.sigma, fill=False, color=GOOD, lw=2
     )
     axes[0].add_patch(circle)
     axes[0].set_xticks([])
     axes[0].set_yticks([])
     axes[0].set_title(f"two lobes, one fitted pRF\n$R^2$ = {fit.r2:.4f}, accepted", fontsize=9)
-    axes[0].set_xlabel(f"fitted $\\sigma$ = {fit.sigma:.2f}, belonging to neither lobe", fontsize=8)
+    axes[0].set_xlabel(f"fitted $\\sigma$ = {fit.sigma:.2f} px", fontsize=8)
 
     for (label, values), colour, marker in zip(
         series.items(), (WARN, "#d98a3a", ACCENT), ("o", "s", "^")
@@ -592,14 +608,14 @@ def figure_misspecification() -> None:
     )
     axes[1].set_xlabel("noise (% of signal SD)")
     axes[1].set_ylabel("second-field $R^2$ gain")
-    axes[1].set_title("Misspecification is reported, not hidden")
+    axes[1].set_title("Residual second-field gain")
     axes[1].legend(frameon=False, fontsize=8)
     axes[1].grid(axis="y", color="#eef1f4", lw=1)
     axes[1].set_axisbelow(True)
     axes[1].margins(y=0.2)
 
     fig.suptitle(
-        "A unit driven by two lobes is flagged, not silently mis-fitted",
+        "Single-Gaussian fit to two synthetic lobes",
         fontsize=11.5,
         fontweight="bold",
     )
@@ -609,8 +625,8 @@ def figure_misspecification() -> None:
 
 
 def figure_runtime() -> None:
-    """Per-unit cost is flat, and cross-validation multiplies it by a constant."""
-    report = json.loads((RESULTS / "validation.json").read_text())
+    """Recorded hardware timings for fit and cross-validation."""
+    report = load_recorded_report()
     rows = report["runtime"]["rows"]
     units = [r["units"] for r in rows]
     per_unit = [r["per_unit_ms"] for r in rows]
@@ -635,7 +651,7 @@ def figure_runtime() -> None:
     axes[0].set_ylim(0, max(per_unit) * 1.5)
     axes[0].set_xlabel("units fitted")
     axes[0].set_ylabel("per unit (ms)")
-    axes[0].set_title("Flat: nothing quadratic in the loop")
+    axes[0].set_title("Measured time per unit")
 
     axes[1].bar([str(u) for u in units], factor, color=GOOD, width=0.55)
     for i, v in enumerate(factor):
@@ -651,20 +667,25 @@ def figure_runtime() -> None:
     axes[1].set_xlabel("units fitted")
     axes[1].set_ylabel("CV cost ÷ fit cost")
     axes[1].set_ylim(0, max(factor) * 1.35)
-    axes[1].set_title("Cross-validation costs a constant factor")
+    axes[1].set_title("Cross-validation overhead")
 
     for axis in axes:
         axis.grid(axis="y", color="#eef1f4", lw=1)
         axis.set_axisbelow(True)
-    fig.suptitle(
-        "Runtime scales linearly in units (hardware-specific)", fontsize=11.5, fontweight="bold"
-    )
+    fig.suptitle("Recorded hardware timings", fontsize=11.5, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.9))
     fig.savefig(FIGURES / "runtime.png", dpi=150)
     plt.close(fig)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Regenerate nine validation figures in outputs/.")
+    parser.parse_args(argv)
+    try:
+        load_recorded_report()
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     FIGURES.mkdir(parents=True, exist_ok=True)
     for draw in (
         figure_stimulus,

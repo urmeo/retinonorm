@@ -10,11 +10,46 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cortexprobe.prf.fit import UnitFit
+from cortexprobe.prf.fit import UnitFit, _standard_errors
 
 from .conftest import synthesise
 
 TRUTH = (12.0, 8.0, 5.0)
+
+
+@pytest.mark.parametrize("mode", ["zero", "missing", "duplicate", "nan", "inf"])
+def test_unidentifiable_or_nonfinite_jacobians_have_undefined_errors(mode) -> None:
+    jacobian = np.random.default_rng(0).normal(size=(80, 3))
+    if mode == "zero":
+        jacobian[:] = 0
+    elif mode == "missing":
+        jacobian[:, 2] = 0
+    elif mode == "duplicate":
+        jacobian[:, 2] = jacobian[:, 1]
+    else:
+        jacobian[0, 0] = np.nan if mode == "nan" else np.inf
+    assert np.isnan(_standard_errors(jacobian, 1.0, 80)).all()
+
+
+def test_identified_jacobian_retains_the_covariance_formula() -> None:
+    jacobian = np.vstack([np.eye(3)] * 4)
+    assert _standard_errors(jacobian, 3.5, 12) == pytest.approx((0.5, 0.5, 0.5))
+
+
+def test_pseudoinverse_cutoff_cannot_report_false_zero_precision() -> None:
+    jacobian = np.vstack([np.eye(3)] * 4)
+    jacobian[:, 2] *= 1e-10
+    assert np.isnan(_standard_errors(jacobian, 3.5, 12)).all()
+
+
+@pytest.mark.parametrize("cost", [-1, np.nan, np.inf])
+def test_invalid_residual_cost_has_undefined_errors(cost) -> None:
+    assert np.isnan(_standard_errors(np.vstack([np.eye(3)] * 4), cost, 12)).all()
+
+
+def test_invalid_covariance_shape_and_frame_count_are_undefined() -> None:
+    assert np.isnan(_standard_errors(np.ones((20, 2)), 1, 20)).all()
+    assert np.isnan(_standard_errors(np.ones((20, 3)), 1, 21)).all()
 
 
 def test_standard_errors_are_finite_for_a_good_fit(fitter, grid, apertures) -> None:
