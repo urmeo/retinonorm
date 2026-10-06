@@ -139,9 +139,13 @@ def test_tolerated_regeneration_preserves_original_record(
     assert json.loads(path.read_text()) == record
 
 
+@pytest.mark.parametrize("separate_runtime", [False, True])
 def test_changed_config_preserves_old_runtime_provenance(
-    report_script, record, monkeypatch, tmp_path
+    report_script, record, monkeypatch, tmp_path, separate_runtime
 ):
+    if not separate_runtime:
+        for key in ("runtime_environment", "runtime_generated", "runtime_config_digest"):
+            record.pop(key, None)
     path, environment = prepare_run(report_script, record, monkeypatch, tmp_path)
     monkeypatch.setattr(report_script, "CONFIG", replace(report_script.CONFIG, seed=123))
     assert report_script.main([]) == 0
@@ -150,9 +154,13 @@ def test_changed_config_preserves_old_runtime_provenance(
     assert updated["generated"] == date.today().isoformat()
     assert updated["config_digest"] != record["config_digest"]
     assert updated["runtime"] == record["runtime"]
-    assert updated["runtime_environment"] == record["environment"]
-    assert updated["runtime_generated"] == record["generated"]
-    assert updated["runtime_config_digest"] == record["config_digest"]
+    assert updated["runtime_environment"] == record.get(
+        "runtime_environment", record["environment"]
+    )
+    assert updated["runtime_generated"] == record.get("runtime_generated", record["generated"])
+    assert updated["runtime_config_digest"] == record.get(
+        "runtime_config_digest", record["config_digest"]
+    )
     runtime_block = report_script.render(updated)["runtime"]
     assert record["config_digest"][:12] in runtime_block
     assert updated["config_digest"][:12] not in runtime_block
