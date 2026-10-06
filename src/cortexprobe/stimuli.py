@@ -1,9 +1,4 @@
-"""Retinotopic mapping stimuli.
-
-The same aperture sequence serves two roles: it is shown to the network, and it is the
-regressor the pRF model is fitted against. Generating it once, here, keeps those two uses
-from drifting apart.
-"""
+"""Binary mapping apertures, frame groups, and cross-group similarity pruning."""
 
 from __future__ import annotations
 
@@ -18,30 +13,22 @@ from .geometry import Grid
 
 
 def frame_similarity(stack: BoolArray) -> FloatArray:
-    """Pairwise cosine similarity between aperture frames.
-
-    Cosine rather than raw overlap, so a large frame and a small one are not judged similar
-    merely because the large one covers the small one's pixels along with many others.
-    """
+    """Pairwise cosine overlap of nonempty frames, normalized by each frame's size."""
+    if stack.ndim != 3 or len(stack) == 0:
+        raise ValueError("apertures must be a nonempty (frames, height, width) stack")
     flat = stack.reshape(len(stack), -1).astype(np.float64)
     norms = np.linalg.norm(flat, axis=1)
-    norms[norms == 0.0] = 1.0
+    if not np.isfinite(norms).all() or np.any(norms == 0.0):
+        raise ValueError("similarity requires finite, nonempty aperture frames")
     unit = flat / norms[:, None]
     similarity: FloatArray = unit @ unit.T
     return similarity
 
 
 def _prune_leaking_frames(stack: BoolArray, groups: np.ndarray, threshold: float) -> np.ndarray:
-    """Frame indices to keep so no cross-group pair overlaps above ``threshold``.
+    """Keep indices after pruning all cross-group cosine overlaps above ``threshold``.
 
-    Group labels come from index arithmetic -- a wedge start angle, a ring block -- which knows
-    nothing about how much neighbouring apertures actually share. Frames adjacent to a group
-    boundary can therefore overlap a training frame almost completely. Rather than trust the
-    arithmetic, the offending frames are measured and dropped.
-
-    Frames are removed one at a time, always the one in the most surviving violations, until
-    none remain. Dropping frames costs a little data; leaving them makes every held-out score
-    on this design an overestimate of unknown size.
+    Remove the frame in the most surviving violations, then repeat until none remain.
     """
     similarity = frame_similarity(stack)
     violating = (similarity > threshold) & (groups[:, None] != groups[None, :])
@@ -67,12 +54,16 @@ class ApertureSequence:
     def __post_init__(self) -> None:
         if self.apertures.dtype != np.bool_:
             raise TypeError("apertures must be boolean")
+        if self.apertures.ndim != 3 or len(self.apertures) == 0:
+            raise ValueError("apertures must be a nonempty (frames, height, width) stack")
         if self.apertures.shape[1:] != self.grid.shape:
             raise ValueError("aperture frames must match the grid")
-        if len(self.frame_index) != len(self.apertures):
+        if np.ndim(self.frame_index) != 1 or len(self.frame_index) != len(self.apertures):
             raise ValueError("frame_index must label every frame")
-        if len(self.group) != len(self.apertures):
+        if np.ndim(self.group) != 1 or len(self.group) != len(self.apertures):
             raise ValueError("group must label every frame")
+        if not self.apertures[:, self.grid.field_mask].any(axis=1).all():
+            raise ConfigError("aperture frames must expose at least one field pixel")
 
     @property
     def n_frames(self) -> int:
@@ -81,7 +72,9 @@ class ApertureSequence:
     @property
     def coverage(self) -> FloatArray:
         """Fraction of the field exposed in each frame."""
-        exposed: FloatArray = self.apertures.mean(axis=(1, 2))
+        exposed: FloatArray = (
+            self.apertures[:, self.grid.field_mask].sum(axis=1) / self.grid.field_mask.sum()
+        )
         return exposed
 
     def as_float(self) -> FloatArray:
@@ -101,6 +94,13 @@ class ApertureGenerator(ABC):
         frames, labels, groups = self._frames()
         stack = np.stack(frames) & self.grid.field_mask
         group_array = np.asarray(groups)
+
+        if not stack.any(axis=(1, 2)).all():
+            raise ConfigError(
+                f"{self.kind} design contains empty apertures at "
+                f"resolution={self.config.resolution}; "
+                "increase the aperture width, thickness, or span, or raise the resolution"
+            )
 
         keep = _prune_leaking_frames(stack, group_array, self.config.max_fold_similarity)
         if len(np.unique(group_array)) >= 2 > len(np.unique(group_array[keep])):
@@ -125,32 +125,19 @@ class ApertureGenerator(ABC):
     @property
     @abstractmethod
     def n_frames(self) -> int:
-        """Frames this design lays out, before leakage pruning removes any.
-
-        :meth:`build` may return fewer: see :func:`_prune_leaking_frames`. Read
-        :attr:`ApertureSequence.n_frames` for the count actually presented.
-        """
+        """Frame count before pruning; read sequence.n_frames for the retained count."""
 
     @abstractmethod
     def _frames(self) -> tuple[list[BoolArray], list[int], list[int]]:
-        """Return the unmasked frames, their labels, and their cross-validation groups.
-
-        Frames within a group are strongly overlapping and must never be split across a
-        train/test boundary. Groups are the smallest unit a fold may contain.
-        """
+        """Return unmasked frames, labels, and indivisible cross-validation groups."""
 
 
 class BarSweep(ApertureGenerator):
-    """A bar traverses the field once per direction, perpendicular to its heading.
+    """A bar traverses the field perpendicular to each direction.
 
-    Frames are grouped by sweep *axis* (``direction % 180``), not by direction. The bar
-    position depends on ``x cos(theta) + y sin(theta)``, which negates under a 180 degree
-    turn, while the sweep offsets run symmetrically from ``-radius`` to ``+radius``. Frame
-    ``(d, k)`` is therefore bit-identical to frame ``(d + 180, n_steps - 1 - k)``. Without an
-    haemodynamic response there is no temporal asymmetry to break the tie, so a return sweep
-    carries no information its outbound partner does not. Grouping by direction would place
-    those identical frames on opposite sides of a cross-validation boundary and score
-    memorisation as generalisation.
+    Groups use sweep axis ``direction % 180``. Symmetric travel makes a 180-degree return
+    sweep duplicate the outbound frames in reverse order. With no haemodynamic convolution,
+    both directions must share a group to keep duplicate stimuli out of opposing folds.
     """
 
     kind = "bar"

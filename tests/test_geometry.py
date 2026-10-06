@@ -18,6 +18,12 @@ def test_a_grid_needs_at_least_two_samples() -> None:
         Grid(1)
 
 
+@pytest.mark.parametrize("resolution", [8.5, np.nan, np.inf, True])
+def test_grid_resolution_requires_an_integer(resolution) -> None:
+    with pytest.raises(ValueError, match="integer"):
+        Grid(resolution)
+
+
 @pytest.mark.parametrize("resolution", [2, 8, 64])
 def test_shape_and_radius_follow_the_resolution(resolution) -> None:
     grid = Grid(resolution)

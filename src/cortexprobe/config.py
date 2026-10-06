@@ -1,14 +1,10 @@
-"""Run configuration.
-
-Every parameter that can change a result lives in one of these dataclasses. Nothing in the
-pipeline reads loose keyword arguments, so a run is fully described by its :class:`RunConfig`
-and reproducible from its digest.
-"""
+"""Validated analysis settings and reserved network metadata with stable serialization."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any, ClassVar, Optional, TypeVar, get_args, get_origin, get_type_hints
@@ -20,12 +16,24 @@ class ConfigError(ValueError):
     """Raised when a configuration is internally inconsistent."""
 
 
-def _restore(annotation: Any, value: Any) -> Any:
-    """Rebuild the declared container type from its JSON representation.
+def _integer(value: int, name: str) -> None:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ConfigError(f"{name} must be an integer")
 
-    JSON has no tuple, so every tuple field arrives as a list. Without this, a round-trip
-    would silently change field types and break both hashing and frozen-dataclass equality.
-    """
+
+def _finite(value: float, name: str) -> None:
+    try:
+        valid = (
+            isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+        )
+    except OverflowError:
+        valid = False
+    if not valid:
+        raise ConfigError(f"{name} must be finite")
+
+
+def _restore(annotation: Any, value: Any) -> Any:
+    """Restore tuples from JSON lists so configuration equality survives a round trip."""
     if get_origin(annotation) is tuple:
         (element_type, *_) = get_args(annotation) or (Any,)
         return tuple(_restore(element_type, item) for item in value)
@@ -41,27 +49,26 @@ class ConfigBase:
 
     @classmethod
     def from_dict(cls: type[T], payload: dict[str, Any]) -> T:
+        if not isinstance(payload, dict):
+            raise ConfigError(f"{cls.__name__} must be an object")
         hints = get_type_hints(cls)
         known = {field.name for field in fields(cls)}
         unexpected = set(payload) - known
         if unexpected:
             raise ConfigError(f"{cls.__name__} received unknown keys: {sorted(unexpected)}")
-        restored = {name: _restore(hints[name], value) for name, value in payload.items()}
+        try:
+            restored = {name: _restore(hints[name], value) for name, value in payload.items()}
+        except TypeError as exc:
+            raise ConfigError(f"{cls.__name__} has an invalid container field") from exc
         return cls(**restored)
 
 
 @dataclass(frozen=True)
 class StimulusConfig(ConfigBase):
-    """Retinotopic mapping stimulus.
+    """Aperture dimensions, sweep directions, and cross-group cosine threshold.
 
-    A bar aperture sweeps the visual field once per entry in ``directions``. The noise carrier
-    that will fill the aperture arrives with ``models.py``, when there is a network input for
-    it to drive; it is not configured here until then.
-
-    ``max_fold_similarity`` is the largest cosine overlap tolerated between a held-out frame
-    and any training frame. Frames that exceed it across a fold boundary are dropped when the
-    sequence is built, so a cross-validation score cannot be inflated by near-duplicate frames
-    straddling the split.
+    Frames above ``max_fold_similarity`` across groups are pruned. Other possible leakage
+    requires separate checks. These settings generate binary masks, not network inputs.
     """
 
     resolution: int = 128
@@ -73,6 +80,8 @@ class StimulusConfig(ConfigBase):
     max_fold_similarity: float = 0.75
 
     def __post_init__(self) -> None:
+        _integer(self.resolution, "resolution")
+        _integer(self.n_steps, "n_steps")
         if self.resolution < 8:
             raise ConfigError("resolution must be at least 8 pixels")
         if self.resolution % 2:
@@ -81,16 +90,22 @@ class StimulusConfig(ConfigBase):
             )
         if self.n_steps < 2:
             raise ConfigError("n_steps must be at least 2")
+        _finite(self.bar_width_frac, "bar_width_frac")
         if not 0.0 < self.bar_width_frac < 1.0:
             raise ConfigError("bar_width_frac must lie in (0, 1)")
-        if not self.directions:
+        if not isinstance(self.directions, (tuple, list)) or not self.directions:
             raise ConfigError("at least one sweep direction is required")
+        for direction in self.directions:
+            _integer(direction, "directions")
         if any(not 0 <= d < 360 for d in self.directions):
             raise ConfigError("directions must be degrees in [0, 360)")
+        _finite(self.wedge_span_deg, "wedge_span_deg")
         if not 0.0 < self.wedge_span_deg <= 360.0:
             raise ConfigError("wedge_span_deg must lie in (0, 360]")
+        _finite(self.ring_thickness_frac, "ring_thickness_frac")
         if not 0.0 < self.ring_thickness_frac < 1.0:
             raise ConfigError("ring_thickness_frac must lie in (0, 1)")
+        _finite(self.max_fold_similarity, "max_fold_similarity")
         if not 0.0 < self.max_fold_similarity < 1.0:
             raise ConfigError("max_fold_similarity must lie in (0, 1)")
 
@@ -110,7 +125,7 @@ class StimulusConfig(ConfigBase):
 
 @dataclass(frozen=True)
 class ModelConfig(ConfigBase):
-    """Which network to probe, and where to tap it."""
+    """Reserved network metadata; no network loader or activation runner is implemented."""
 
     name: str = "alexnet"
     layers: tuple[str, ...] = ("features.2", "features.5", "features.12")
@@ -118,29 +133,29 @@ class ModelConfig(ConfigBase):
     pool_to: int = 8
 
     def __post_init__(self) -> None:
-        if not self.name:
+        if not isinstance(self.name, str) or not self.name.strip():
             raise ConfigError("model name must not be empty")
-        if not self.layers:
+        if not isinstance(self.layers, (tuple, list)) or not self.layers:
             raise ConfigError("at least one tap layer is required")
+        if any(not isinstance(layer, str) or not layer.strip() for layer in self.layers):
+            raise ConfigError("tap layers must be nonempty names")
         if len(set(self.layers)) != len(self.layers):
             raise ConfigError("tap layers must be unique")
+        _integer(self.pool_to, "pool_to")
         if self.pool_to < 2:
             raise ConfigError("pool_to must be at least 2 to retain retinotopic structure")
+        if self.weights_seed is not None:
+            _integer(self.weights_seed, "weights_seed")
+            if self.weights_seed < 0:
+                raise ConfigError("weights_seed must be nonnegative")
 
 
 @dataclass(frozen=True)
 class FitConfig(ConfigBase):
-    """Search settings for the two-stage pRF fit.
+    """Coarse-grid and refinement settings.
 
-    A coarse grid selects the basin; nonlinear refinement finds the minimum inside it. Grid
-    search alone is too coarse to trust, and refinement alone settles into local minima.
-
-    Both ends of ``sigma_bounds`` are constrained, for the same reason from opposite
-    directions. The floor is checked here: below the pixel pitch a Gaussian is under-sampled.
-    The ceiling depends on the field size and so is checked by
-    :class:`~cortexprobe.prf.fit.PRFFitter`, which knows the grid: at or beyond about
-    ``resolution / 6.1`` a Gaussian is truncated by the field edge. The default ceiling of 20 px
-    suits the default 128 px stimulus, whose limit is 20.9 px.
+    Sigma is at least one pixel. The fitter checks centered circular-field mass at its ceiling,
+    about ``resolution / 6.1`` for a 99% tolerance. Off-center fields can lose more mass.
     """
 
     grid_size: int = 12
@@ -149,9 +164,15 @@ class FitConfig(ConfigBase):
     r2_threshold: float = 0.2
 
     def __post_init__(self) -> None:
+        _integer(self.grid_size, "grid_size")
+        _integer(self.max_nfev, "max_nfev")
         if self.grid_size < 3:
             raise ConfigError("grid_size must be at least 3")
+        if not isinstance(self.sigma_bounds, (tuple, list)) or len(self.sigma_bounds) != 2:
+            raise ConfigError("sigma_bounds must contain exactly two bounds")
         low, high = self.sigma_bounds
+        _finite(low, "lower sigma bound")
+        _finite(high, "upper sigma bound")
         if low < 1.0:
             raise ConfigError(
                 "lower sigma bound must be at least 1 pixel; below the pixel pitch a Gaussian "
@@ -161,13 +182,14 @@ class FitConfig(ConfigBase):
             raise ConfigError("sigma_bounds must be increasing")
         if self.max_nfev < 1:
             raise ConfigError("max_nfev must be positive")
+        _finite(self.r2_threshold, "r2_threshold")
         if not 0.0 <= self.r2_threshold <= 1.0:
             raise ConfigError("r2_threshold must lie in [0, 1]")
 
 
 @dataclass(frozen=True)
 class RunConfig(ConfigBase):
-    """A complete, reproducible experiment."""
+    """Analysis settings and reserved model metadata with a stable JSON digest."""
 
     stimulus: StimulusConfig = StimulusConfig()
     model: ModelConfig = ModelConfig()
@@ -180,8 +202,18 @@ class RunConfig(ConfigBase):
         "fit": FitConfig,
     }
 
+    def __post_init__(self) -> None:
+        _integer(self.seed, "seed")
+        if self.seed < 0:
+            raise ConfigError("seed must be nonnegative")
+        for name, section_type in self._SECTIONS.items():
+            if not isinstance(getattr(self, name), section_type):
+                raise ConfigError(f"{name} must be a {section_type.__name__}")
+
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> RunConfig:
+        if not isinstance(payload, dict):
+            raise ConfigError("RunConfig must be an object")
         sections: dict[str, Any] = dict(payload)
         for name, section_type in cls._SECTIONS.items():
             if name in sections:

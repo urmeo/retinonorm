@@ -1,32 +1,30 @@
-"""Runtime scaling of the pRF fitter.
-
-Answers two questions the design depends on. First, does per-unit cost stay flat as the
-number of units grows, or does something quadratic hide in the loop? Second, how much does
-leave-one-group-out cross-validation multiply that cost?
-
-Run directly; it prints a table and writes nothing.
-"""
+"""Print measured pRF fitting and grouped cross-validation times by unit count."""
 
 from __future__ import annotations
 
 import argparse
+import math
 import time
 
 import numpy as np
 
 from cortexprobe.config import FitConfig, StimulusConfig
 from cortexprobe.geometry import Grid
-from cortexprobe.prf.fit import PRFFitter
+from cortexprobe.prf.fit import RESOLUTION_PER_SIGMA, PRFFitter
 from cortexprobe.prf.model import GaussianReceptiveField, predict
 from cortexprobe.prf.validation import CrossValidator
 from cortexprobe.stimuli import build_apertures
 
 RESOLUTION = 64
 UNIT_COUNTS = (1, 5, 10, 25, 50, 100)
+SIGMA_HIGH = 10.0
+MIN_RESOLUTION = 2 * math.ceil(SIGMA_HIGH * RESOLUTION_PER_SIGMA / 2)
 
 
 def make_units(grid: Grid, apertures: np.ndarray, n_units: int, seed: int = 0) -> np.ndarray:
     """Activations from randomly placed pRFs, one column per unit."""
+    if isinstance(n_units, bool) or not isinstance(n_units, (int, np.integer)) or n_units <= 0:
+        raise ValueError("n_units must be a positive integer")
     rng = np.random.default_rng(seed)
     radius = grid.radius * 0.7
     columns = []
@@ -44,11 +42,32 @@ def time_call(function, *args) -> tuple[float, object]:
     return time.perf_counter() - start, result
 
 
-def main() -> None:
+def positive_int(value: str) -> int:
+    """An argparse count that cannot produce an empty benchmark."""
+    try:
+        number = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be a positive integer") from error
+    if number <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return number
+
+
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--resolution", type=int, default=RESOLUTION)
-    parser.add_argument("--max-units", type=int, default=max(UNIT_COUNTS))
-    arguments = parser.parse_args()
+    parser.add_argument(
+        "--resolution",
+        type=positive_int,
+        default=RESOLUTION,
+        help=f"even field width, at least {MIN_RESOLUTION}px for fixed sigma bounds 1-10",
+    )
+    parser.add_argument("--max-units", type=positive_int, default=max(UNIT_COUNTS))
+    arguments = parser.parse_args(argv)
+    if arguments.resolution < MIN_RESOLUTION or arguments.resolution % 2:
+        parser.error(
+            f"--resolution must be even and at least {MIN_RESOLUTION}px "
+            "for the benchmark's fixed sigma bounds (1, 10)"
+        )
 
     grid = Grid(arguments.resolution)
     config = StimulusConfig(
@@ -56,7 +75,7 @@ def main() -> None:
     )
     sequence = build_apertures(config, "bar")
     apertures = sequence.as_float()
-    fit_config = FitConfig(grid_size=10, sigma_bounds=(1.0, 10.0))
+    fit_config = FitConfig(grid_size=10, sigma_bounds=(1.0, SIGMA_HIGH))
 
     setup, fitter = time_call(PRFFitter, grid, apertures, fit_config)
     print(
@@ -85,7 +104,7 @@ def main() -> None:
     largest = counts[-1]
     activations = make_units(grid, apertures, largest)
     per_unit = time_call(fitter.fit_all, activations)[0] / largest
-    print(f"\nprojected: 10k units ~ {per_unit * 10_000 / 60:.1f} min single-threaded")
+    print(f"\nprojected from last measurement: 10k units ~ {per_unit * 10_000 / 60:.1f} min")
 
 
 if __name__ == "__main__":

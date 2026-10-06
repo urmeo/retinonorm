@@ -1,24 +1,19 @@
 cff-version: 1.2.0
-title: "CortexProbe: population receptive fields and lesion effects in convolutional models of the visual hierarchy"
+title: "CortexProbe: synthetic receptive field fitting and grouped validation"
 message: "If you use this software, please cite it as below."
 type: software
 authors:
   - given-names: Urme
 license: MIT
-version: 0.1.0
+version: 0.2.0
 abstract: >-
-  A measurement instrument for population receptive fields in convolutional
-  networks. Mapping stimuli are generated in-repo and unit activation
-  timecourses are fitted with the Dumoulin and Wandell (2008) pRF model,
-  validated against synthetic ground truth with held-out cross-validation
-  grouped by sweep axis. The instrument is validated; no network has been
-  probed, and the hypotheses the project exists to test remain untested.
+  Gaussian receptive field fitting with synthetic moving apertures, grouped
+  validation and local parameter uncertainty. No network or human data tested.
 keywords:
   - neuroscience
   - population-receptive-field
   - retinotopy
   - vision
-  - lesion
 references:
   - type: article
     title: "Population receptive field estimates in human visual cortex"

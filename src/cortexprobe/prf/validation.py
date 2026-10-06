@@ -1,15 +1,7 @@
-"""Held-out validation of fitted pRFs.
+"""Held-out pRF scores using whole sweep groups.
 
-In-sample R² measures how well five free parameters can be bent to fit one timecourse:
-three searched (``x0``, ``y0``, ``sigma``) plus an amplitude and baseline solved in closed form. It
-says nothing about whether the pRF generalises to stimulus positions the fit never saw.
-
-Folds are split by *sweep group*, never by individual frame. Adjacent frames within a sweep
-show overlapping apertures, so a random frame split would put near-duplicates on both sides of
-the train/test boundary and report a generalisation score that is really memorisation.
-
-A group is a sweep *axis*, not a sweep direction: see :class:`~cortexprobe.stimuli.BarSweep`
-for why a 180 degree return sweep is the same stimulus run backwards.
+Training parameters, amplitude, and baseline remain fixed for held-out scoring. Bar groups
+use sweep axes so a 180 degree return sweep cannot place duplicate frames in opposing folds.
 """
 
 from __future__ import annotations
@@ -35,7 +27,7 @@ class CrossValidatedFit:
 
     @property
     def cv_r2(self) -> float:
-        """Mean held-out R². Lower than in-sample R² for any honest fit."""
+        """Mean finite held-out R²; undefined folds do not enter the mean."""
         scores = [score for score in self.fold_r2 if np.isfinite(score)]
         return float(np.mean(scores)) if scores else float("nan")
 
@@ -61,6 +53,12 @@ class LeaveOneGroupOut:
         self.groups = np.asarray(groups)
         if self.groups.ndim != 1:
             raise ValueError("groups must be one-dimensional")
+        try:
+            finite = bool(np.isfinite(self.groups).all())
+        except TypeError:
+            finite = False
+        if not finite:
+            raise ValueError("groups must be finite numeric labels")
         self.unique = np.unique(self.groups)
         if len(self.unique) < 2:
             raise ValueError("cross-validation needs at least two sweep groups")
@@ -78,8 +76,8 @@ class LeaveOneGroupOut:
 class CrossValidator:
     """Fits and cross-validates pRFs against a grouped stimulus sequence.
 
-    One fitter is built per fold and reused across every unit. Building them per unit would
-    rebuild identical candidate predictions for each of possibly thousands of units.
+    Fitters are reused across units. Folds with at most five training frames are skipped;
+    failed folds yield NaN scores. The reported mean uses only finite retained fold scores.
     """
 
     def __init__(
@@ -93,6 +91,10 @@ class CrossValidator:
         self.apertures = np.asarray(apertures, dtype=np.float64)
         self.config = config
         self.splitter = LeaveOneGroupOut(groups)
+        if self.apertures.ndim != 3:
+            raise ValueError("apertures must have shape (frames, height, width)")
+        if len(self.splitter.groups) != len(self.apertures):
+            raise ValueError("groups must have one group per stimulus frame")
 
         self._full = PRFFitter(grid, self.apertures, config)
         self._folds: list[tuple[IntArray, IntArray, PRFFitter]] = []
@@ -114,11 +116,7 @@ class CrossValidator:
         return CrossValidatedFit(fit=full_fit, fold_r2=tuple(scores))
 
     def _score_held_out(self, train_fit: UnitFit, test: IntArray, response: FloatArray) -> float:
-        """Apply train-fold parameters, unchanged, to held-out frames.
-
-        Amplitude and baseline come from the training fold too. Re-solving them on the test
-        frames would leak the held-out data back into the prediction.
-        """
+        """Apply training geometry, amplitude, and baseline unchanged to held-out frames."""
         if not np.isfinite([train_fit.x0, train_fit.y0, train_fit.sigma]).all():
             return float("nan")
         field = GaussianReceptiveField(train_fit.x0, train_fit.y0, train_fit.sigma)

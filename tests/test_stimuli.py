@@ -296,3 +296,55 @@ def test_more_steps_means_more_cross_group_overlap() -> None:
         worst.append(_cross_group_similarity(build_apertures(config, "ring")).max())
 
     assert worst == sorted(worst)
+
+
+@pytest.mark.parametrize(
+    ("kind", "overrides"),
+    [
+        ("bar", {"bar_width_frac": 0.001}),
+        ("ring", {"ring_thickness_frac": 0.001}),
+        ("wedge", {"wedge_span_deg": 0.001}),
+    ],
+)
+def test_empty_generated_apertures_are_rejected(kind, overrides) -> None:
+    config = StimulusConfig(resolution=8, n_steps=8, directions=(0, 90), **overrides)
+    with pytest.raises(ConfigError, match="empty apertures at resolution=8"):
+        build_apertures(config, kind)
+
+
+def test_coverage_counts_only_the_circular_field() -> None:
+    grid = Grid(8)
+    whole = grid.field_mask
+    half = whole & (grid.x >= 0)
+    stack = np.stack([whole, half, np.ones(grid.shape, dtype=bool)])
+    sequence = ApertureSequence(stack, grid, "test", np.arange(3), np.zeros(3))
+    assert sequence.coverage == pytest.approx([1, half.sum() / whole.sum(), 1])
+
+
+@pytest.mark.parametrize("shape", [(8, 8), (1, 8, 8, 1), (0, 8, 8)])
+def test_sequence_requires_a_nonempty_three_dimensional_stack(shape) -> None:
+    with pytest.raises(ValueError, match=r"nonempty .* stack"):
+        ApertureSequence(np.ones(shape, dtype=bool), Grid(8), "test", np.arange(8), np.zeros(8))
+
+
+def test_sequence_rejects_an_empty_field_frame_and_multidimensional_metadata() -> None:
+    grid = Grid(8)
+    stack = np.stack([grid.field_mask, grid.field_mask])
+    with pytest.raises(ValueError, match="frame_index"):
+        ApertureSequence(stack, grid, "test", np.arange(2)[:, None], np.zeros(2))
+    with pytest.raises(ValueError, match="group"):
+        ApertureSequence(stack, grid, "test", np.arange(2), np.zeros((2, 1)))
+    stack[0] = False
+    with pytest.raises(ConfigError, match="at least one field pixel"):
+        ApertureSequence(stack, grid, "test", np.arange(2), np.zeros(2))
+
+
+def test_empty_frame_similarity_is_undefined() -> None:
+    with pytest.raises(ValueError, match="nonempty aperture frames"):
+        frame_similarity(np.zeros((2, 8, 8), dtype=bool))
+
+
+def test_sequence_preserves_list_metadata_compatibility() -> None:
+    grid = Grid(8)
+    sequence = ApertureSequence(np.stack([grid.field_mask]), grid, "test", [0], [0])
+    assert sequence.coverage.tolist() == [1]

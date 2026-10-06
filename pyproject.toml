@@ -1,19 +1,19 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "cortexprobe"
-version = "0.1.0"
-description = "Population receptive fields and lesion effects in convolutional models of the visual hierarchy"
+version = "0.2.0"
+description = "Synthetic receptive field fitting and grouped validation"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 authors = [{ name = "Urme" }]
-keywords = ["neuroscience", "population-receptive-field", "retinotopy", "vision", "lesion"]
+keywords = ["receptive-field", "synthetic-data", "grouped-validation", "uncertainty"]
 classifiers = [
   "Intended Audience :: Science/Research",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Topic :: Scientific/Engineering",
 ]
@@ -23,13 +23,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-io = ["pandas>=2.0,<3", "pyarrow>=15.0"]
-models = ["torch>=2.2,<3", "torchvision>=0.17,<1"]
 viz = ["matplotlib>=3.7,<4"]
 dev = [
   "pytest>=8.0,<9",
   "pytest-cov>=5.0,<7",
-  "hypothesis>=6.100,<7",
   "ruff>=0.6,<1",
   "mypy>=1.11,<2",
 ]
@@ -48,18 +45,13 @@ ignore = ["N803", "N806"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ARG"]
-# from_dict resolves these annotations with get_type_hints, which *evaluates* them, so the
-# future import does not make PEP 604 unions safe here. `X | None` raises TypeError on
-# Python 3.9, which this project still supports. PEP 585 builtin generics are fine: they
-# landed in 3.9.
+# Runtime annotation resolution must support Python 3.9.
 "src/cortexprobe/config.py" = ["UP007", "UP045"]
-# The report script emits typographic Markdown: en dashes for ranges, x for the CV factor.
+# Report text uses Unicode scientific notation.
 "scripts/*" = ["RUF001"]
 
 [tool.mypy]
-# No python_version pin: mypy takes it from the interpreter, so the 3.9 and 3.12 CI jobs each
-# check their own semantics against the numpy stubs actually installed there. Pinning 3.9 made
-# mypy fail to parse modern numpy stubs, which use syntax newer than the pinned version.
+# Infer Python version from the active interpreter.
 files = ["src"]
 strict = true
 warn_unreachable = true

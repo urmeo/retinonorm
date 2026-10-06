@@ -1,10 +1,4 @@
-"""The pRF model itself: the weighting, and the response it predicts.
-
-This is the mathematics the rest of the instrument rests on. The unit-volume normalisation in
-particular is a scientific choice, not a numerical convenience -- under unit-peak normalisation
-the overlap between a pRF and an aperture would grow with sigma by construction, which is the
-very quantity the size-versus-depth hypothesis intends to measure.
-"""
+"""Gaussian weights, overlap predictions, and the amplitude convention."""
 
 from __future__ import annotations
 
@@ -49,7 +43,7 @@ def test_weights_carry_unit_volume() -> None:
 
 
 def test_a_wider_field_spreads_the_same_weight_more_thinly() -> None:
-    """The property that keeps pRF size against depth a measurement rather than a tautology."""
+    """Unit volume sets the weight scale before fitting a free amplitude."""
     grid = Grid(64)
 
     narrow = GaussianReceptiveField(0.0, 0.0, 2.0).weights(grid)
@@ -150,3 +144,49 @@ def test_translating_field_and_aperture_together_leaves_the_response_unchanged()
         predict(here, apertures),
         predict(one_right, np.roll(apertures, 1, axis=2)),
     )
+
+
+@pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf, True])
+@pytest.mark.parametrize("parameter", ["x0", "y0", "sigma"])
+def test_gaussian_parameters_must_be_finite(parameter, value) -> None:
+    parameters = {"x0": 0.0, "y0": 0.0, "sigma": 3.0}
+    parameters[parameter] = value
+    with pytest.raises(ValueError, match="finite"):
+        GaussianReceptiveField(**parameters)
+
+
+@pytest.mark.parametrize("sigma", [1e-300, 1e300])
+def test_unrepresentable_gaussian_variance_is_rejected(sigma) -> None:
+    with pytest.raises(ValueError, match="represented"):
+        GaussianReceptiveField(0, 0, sigma)
+
+
+@pytest.mark.parametrize("sigma", [2.0, 5.0, 8.0])
+def test_free_amplitude_absorbs_unit_peak_normalization(grid, apertures, sigma) -> None:
+    from cortexprobe.prf.fit import _r_squared, _solve_amplitude
+
+    response = 3 * predict(GaussianReceptiveField(12, 8, 5).weights(grid), apertures) + 0.5
+    volume = predict(GaussianReceptiveField(12, 8, sigma).weights(grid), apertures)
+    scale = 2 * np.pi * sigma**2
+    volume_coefficients, volume_fit = _solve_amplitude(volume, response)
+    peak_coefficients, peak_fit = _solve_amplitude(volume * scale, response)
+    assert peak_fit == pytest.approx(volume_fit, abs=1e-12)
+    assert peak_coefficients[0] * scale == pytest.approx(volume_coefficients[0])
+    assert _r_squared(response, peak_fit) == pytest.approx(_r_squared(response, volume_fit))
+
+
+def test_centered_volume_guard_does_not_guarantee_edge_mass(grid) -> None:
+    centered = GaussianReceptiveField(0, 0, 5).weights(grid)[grid.field_mask].sum()
+    edge = GaussianReceptiveField(grid.radius, 0, 5).weights(grid)[grid.field_mask].sum()
+    assert centered > 0.99
+    assert edge < 0.6
+
+
+def test_prediction_requires_a_frame_stack_and_candidates(grid) -> None:
+    weights = GaussianReceptiveField(0, 0, 3).weights(grid)
+    with pytest.raises(ValueError, match="shape"):
+        predict(weights, np.ones(grid.shape))
+    with pytest.raises(ValueError, match="at least one aperture"):
+        predict(weights, np.empty((0, *grid.shape)))
+    with pytest.raises(ValueError, match="at least one candidate"):
+        design_matrix([], grid, np.ones((2, *grid.shape)))
