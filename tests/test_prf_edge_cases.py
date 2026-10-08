@@ -116,9 +116,6 @@ def test_receptive_field_far_outside_field_is_finite(grid) -> None:
     assert weights.sum() == pytest.approx(0.0, abs=1e-12)
 
 
-# --- converged is the optimiser's answer; accepted is the scientific one -------------------
-
-
 def test_a_clean_fit_to_noise_converges_but_is_not_accepted(fitter) -> None:
     """The distinction that matters: the numerics worked, the answer is uninteresting."""
     response = np.random.default_rng(11).normal(size=fitter.n_frames)
@@ -205,9 +202,6 @@ def test_a_suppressed_unit_is_not_accepted_as_a_prf(fitter, grid, apertures) -> 
     assert np.hypot(driven_fit.x0 - 12.0, driven_fit.y0 - 8.0) < 0.5
 
 
-# --- unit volume is guarded at both ends of the sigma range --------------------------------
-
-
 def test_sigma_floor_below_the_pixel_pitch_is_rejected() -> None:
     """The lower guard: an under-sampled Gaussian silently loses its unit volume."""
     from cortexprobe.config import ConfigError
@@ -244,9 +238,6 @@ def test_unit_volume_is_lost_above_the_admissible_range(grid) -> None:
     weights = GaussianReceptiveField(0.0, 0.0, 20.0).weights(grid)
 
     assert weights[grid.field_mask].sum() < MIN_ON_GRID_VOLUME
-
-
-# --- misspecification: one Gaussian standing in for two ------------------------------------
 
 
 def test_a_two_lobed_unit_is_flagged_as_misspecified(fitter, grid, apertures) -> None:
@@ -339,9 +330,6 @@ def test_a_perfect_fit_leaves_no_residual_structure(fitter, grid, apertures) -> 
 
 def test_unfittable_response_reports_no_second_field(fitter) -> None:
     assert np.isnan(UnitFit.failed().second_field_r2)
-
-
-# --- defensive paths ------------------------------------------------------------------------
 
 
 def test_r_squared_of_a_constant_response_is_zero() -> None:
@@ -493,7 +481,6 @@ def test_the_sigma_ceiling_error_gives_advice_that_works(grid) -> None:
     advised_sigma = float(re.search(r"bound to about (\d+) px", message).group(1))
     advised_resolution = int(re.search(r"resolution to about (\d+) px", message).group(1))
 
-    # Both routes the message offers must actually construct.
     PRFFitter(grid, apertures, FitConfig(grid_size=5, sigma_bounds=(1.0, advised_sigma)))
     wider = Grid(advised_resolution)
     PRFFitter(

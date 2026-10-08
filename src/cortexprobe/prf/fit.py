@@ -19,21 +19,14 @@ from ..config import ConfigError, FitConfig
 from ..geometry import Grid
 from .model import GaussianReceptiveField, predict
 
-# Three nonlinear parameters plus amplitude and baseline solved by projection.
 N_PARAMETERS = 5
 
-# The parameters the optimiser searches, and so the only ones with a standard error attached.
 FITTED_PARAMETERS = ("x0", "y0", "sigma")
 
-# A fitted value this close to its search bound is reported as pinned rather than estimated.
 BOUND_TOLERANCE = 1e-3
 
-# Minimum sampled circular-field mass for a centered Gaussian at the sigma ceiling.
-# Off-center fields can retain less mass. This is a numerical design limit.
 MIN_ON_GRID_VOLUME = 0.99
 
-# Ratio of field resolution to the largest sigma that still clears MIN_ON_GRID_VOLUME. Measured
-# on the grid rather than derived: 64/10.5, 128/21.0 and 256/42.0 all give 6.095.
 RESOLUTION_PER_SIGMA = 6.1
 
 
@@ -204,7 +197,6 @@ class PRFFitter:
                 f"need more than {N_PARAMETERS} frames to fit a pRF; got {len(apertures)}"
             )
         if not np.isfinite(apertures).all():
-            # Reject before building candidate predictions or entering LAPACK.
             raise ValueError("apertures must be finite; found NaN or inf")
         self.grid = grid
         self.apertures = apertures.astype(np.float64, copy=False)

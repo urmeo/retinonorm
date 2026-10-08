@@ -34,7 +34,6 @@ from cortexprobe.stimuli import build_apertures
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUTS = ROOT / "outputs"
 
-# The configuration every measurement below is made under. Recorded by digest in the output.
 CONFIG = RunConfig.load(ROOT / "configs" / "validation.json")
 
 GROUND_TRUTH = [
@@ -77,9 +76,6 @@ def synthesise(grid, apertures, truth, beta=3.0, baseline=0.5, noise=0.0, seed=0
 def autocorrelated_noise(n_frames, width=CARRIER_WIDTH, seed=21):
     rng = np.random.default_rng(seed)
     return np.convolve(rng.normal(size=n_frames), np.ones(width) / width, mode="same")
-
-
-# --- measurements ---------------------------------------------------------------------------
 
 
 def measure_recovery(grid, apertures, fitter) -> dict[str, Any]:
@@ -239,9 +235,6 @@ def measure_runtime(grid, apertures, sequence, fitter) -> dict[str, Any]:
             }
         )
     return {"rows": rows, "n_folds": len(validator._folds)}
-
-
-# --- rendering ------------------------------------------------------------------------------
 
 
 def current_environment() -> dict[str, str]:
@@ -441,8 +434,6 @@ def run_check(report: dict[str, Any], previous: dict[str, Any], readme: str) -> 
         print("\nrerun without --check to record the new numbers")
         return 1
 
-    # Rendered from the committed numbers, so this comparison is exact by construction and
-    # catches a hand-edited table rather than a floating point difference.
     blocks = render(previous)
     if splice(readme, blocks) != readme:
         print("README.md tables do not match the committed report; rerun without --check")
@@ -497,9 +488,6 @@ def main(argv: list[str] | None = None) -> int:
         "cross_validation": measure_cross_validation(grid, apertures, sequence),
     }
 
-    # Timings differ on every run, so re-measuring them unconditionally would make the
-    # reproducibility check permanently red and therefore worthless. They are refreshed only on
-    # request, and never count as "the numbers changed" when deciding the recorded date.
     report = rounded(report)
 
     if arguments.check:
@@ -508,7 +496,6 @@ def main(argv: list[str] | None = None) -> int:
     running_in = current_environment()
     unchanged = bool(previous) and not drifted(measurements(previous), measurements(report))
     if unchanged:
-        # Keep the original measured record, including differences below tolerance.
         report.update(measurements(previous))
     report["environment"] = previous["environment"] if unchanged else running_in
     report["generated"] = previous["generated"] if unchanged else date.today().isoformat()
@@ -532,7 +519,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
     blocks = render(report)
-    spliced = splice(readme, blocks)  # validated before anything is written
+    spliced = splice(readme, blocks)
 
     OUTPUTS.mkdir(exist_ok=True)
     previous_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")

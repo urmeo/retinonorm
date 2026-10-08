@@ -46,9 +46,6 @@ def _cross_group_similarity(sequence: ApertureSequence) -> np.ndarray:
     return np.asarray(worst)
 
 
-# --- the invariant, over every design and both configurations ------------------------------
-
-
 @pytest.mark.parametrize("kind", KINDS)
 def test_no_duplicate_frame_crosses_a_fold_boundary(small_config, kind) -> None:
     sequence = build_apertures(small_config, kind)
@@ -86,9 +83,6 @@ def test_every_design_yields_at_least_two_groups(default_stimulus_config, kind) 
     sequence = build_apertures(default_stimulus_config, kind)
 
     assert len(np.unique(sequence.group)) >= 2
-
-
-# --- sweep axis grouping ------------------------------------------------------------------
 
 
 def test_opposite_sweeps_share_a_group() -> None:
@@ -143,9 +137,6 @@ def test_distinct_axes_get_distinct_groups(small_config) -> None:
     assert sorted(np.unique(sequence.group)) == [0, 45, 90, 135]
 
 
-# --- pruning -------------------------------------------------------------------------------
-
-
 def test_ring_drops_frames_that_straddle_a_block_boundary(small_config) -> None:
     """Ring blocks come from index arithmetic; adjacent annuli overlap across the boundary."""
     sequence = build_apertures(small_config, "ring")
@@ -186,9 +177,6 @@ def test_frame_similarity_is_a_cosine(small_config) -> None:
     assert similarity.min() >= 0.0
 
 
-# --- sequence metadata ---------------------------------------------------------------------
-
-
 @pytest.mark.parametrize("kind", KINDS)
 def test_frames_are_confined_to_the_field_mask(small_config, kind) -> None:
     sequence = build_apertures(small_config, kind)
@@ -224,9 +212,6 @@ def test_as_float_matches_the_boolean_stack(small_config) -> None:
     sequence = build_apertures(small_config, "bar")
 
     assert np.array_equal(sequence.as_float(), sequence.apertures.astype(np.float64))
-
-
-# --- construction guards -------------------------------------------------------------------
 
 
 def test_sequence_rejects_non_boolean_apertures(grid) -> None:
