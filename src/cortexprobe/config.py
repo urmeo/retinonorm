@@ -35,6 +35,8 @@ def _finite(value: float, name: str) -> None:
 def _restore(annotation: Any, value: Any) -> Any:
     """Restore tuples from JSON lists so configuration equality survives a round trip."""
     if get_origin(annotation) is tuple:
+        if not isinstance(value, (list, tuple)):
+            raise TypeError("tuple fields require a list or tuple")
         (element_type, *_) = get_args(annotation) or (Any,)
         return tuple(_restore(element_type, item) for item in value)
     return value
