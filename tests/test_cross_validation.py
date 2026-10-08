@@ -91,9 +91,6 @@ def test_optimism_is_larger_for_noise_than_for_signal(validator, grid, apertures
 
 SEEDS = range(21, 41)
 
-# A random frame split must inflate the held-out score on temporally correlated noise by at
-# least this much on average. Measured mean is +0.459 with SD 0.402 over the seeds below, so
-# the threshold sits well inside the spread rather than being fitted to it.
 LEAK_THRESHOLD = 0.2
 
 
@@ -186,9 +183,6 @@ def test_cross_validated_fit_reports_fold_dispersion(validator, grid, apertures)
 
     assert np.isfinite(result.cv_r2_sd)
     assert result.cv_r2_sd >= 0.0
-
-
-# --- fold sizing --------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")

@@ -21,8 +21,6 @@ from cortexprobe.config import (
     StimulusConfig,
 )
 
-# --- stimulus guards ------------------------------------------------------------------------
-
 
 @pytest.mark.parametrize(
     ("overrides", "message"),
@@ -56,9 +54,6 @@ def test_stimulus_derived_quantities() -> None:
     assert config.ring_thickness_px == pytest.approx(8.0)
 
 
-# --- model guards ---------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
@@ -71,9 +66,6 @@ def test_stimulus_derived_quantities() -> None:
 def test_model_config_rejects_invalid_values(overrides, message) -> None:
     with pytest.raises(ConfigError, match=message):
         ModelConfig(**overrides)
-
-
-# --- fit guards -----------------------------------------------------------------------------
 
 
 def test_sigma_floor_under_a_pixel_is_rejected_with_a_reason() -> None:
@@ -112,9 +104,6 @@ def test_default_sigma_ceiling_suits_the_default_stimulus() -> None:
     weights = GaussianReceptiveField(0.0, 0.0, sigma_high).weights(grid)
 
     assert weights[grid.field_mask].sum() >= MIN_ON_GRID_VOLUME
-
-
-# --- serialisation --------------------------------------------------------------------------
 
 
 def test_tuples_survive_a_json_round_trip() -> None:
@@ -159,9 +148,6 @@ def test_canonical_json_is_stable_under_key_order() -> None:
     shuffled = dict(reversed(list(json.loads(config.to_json()).items())))
 
     assert RunConfig.from_dict(shuffled).to_json() == config.to_json()
-
-
-# --- digest ---------------------------------------------------------------------------------
 
 
 def test_digest_is_stable_across_equal_configurations() -> None:

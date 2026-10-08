@@ -130,7 +130,7 @@ def figure_stimulus() -> None:
 def figure_fold_leakage() -> None:
     """Worst held-out/training similarity, grouping by direction versus by axis."""
     grid_config = CONFIG.stimulus
-    default = grid_config.__class__(resolution=64, n_steps=20)  # shipped 8 directions
+    default = grid_config.__class__(resolution=64, n_steps=20)
 
     labels, before, after = [], [], []
 
@@ -228,7 +228,6 @@ def figure_recovery() -> None:
             label="mean of 5",
         )
         for column, value in enumerate(data.max(axis=0)):
-            # Noiseless recovery is exact to machine precision; show it as zero, not as 3e-09.
             shown = 0.0 if value < 1e-6 else value
             axis.annotate(
                 f"{shown:.{places}f}",

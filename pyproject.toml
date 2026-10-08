@@ -45,13 +45,10 @@ ignore = ["N803", "N806"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ARG"]
-# Runtime annotation resolution must support Python 3.9.
 "src/cortexprobe/config.py" = ["UP007", "UP045"]
-# Report text uses Unicode scientific notation.
 "scripts/*" = ["RUF001"]
 
 [tool.mypy]
-# Infer Python version from the active interpreter.
 files = ["src"]
 strict = true
 warn_unreachable = true
