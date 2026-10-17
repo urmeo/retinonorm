@@ -104,9 +104,4 @@ draws the 11 scientific plots and preserves the pipeline SVG and PNG preview.
 The [figure index](figures/) identifies recorded results, seeded examples, and
 supplemental diagnostics.
 
-Implementation:
-[stimuli.py](https://github.com/urmeo/cortexprobe/blob/main/src/cortexprobe/stimuli.py),
-[model.py](https://github.com/urmeo/cortexprobe/blob/main/src/cortexprobe/prf/model.py),
-[fit.py](https://github.com/urmeo/cortexprobe/blob/main/src/cortexprobe/prf/fit.py), and
-[validation.py](https://github.com/urmeo/cortexprobe/blob/main/src/cortexprobe/prf/validation.py).
 See [Usage](usage.md) for runnable code and operating limits.

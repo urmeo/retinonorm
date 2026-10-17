@@ -18,7 +18,7 @@ These commands do not regenerate the pipeline.
 
 | Figure | What it shows | Basis |
 |---|---|---|
-| [Pipeline](pipeline.png) | Matched frames → separate paths for the all-frame estimate and grouped prediction tests | Implemented synthetic workflow; editable SVG with a PNG preview |
+| [Pipeline](pipeline.png) | Matched frames → separate paths for the all-frame estimate and grouped prediction tests | Implemented synthetic workflow |
 | [Apertures](stimuli.png) | Bar, wedge, and ring masks with group labels | Configured stimulus designs |
 | [Gaussian overlap](model.png) | A field's overlap with the aperture produces a response | Forward-model illustration |
 | [Response curves](fitted-response.png) | Observations, full-data fit, held-out predictions, and residuals | Seeded demonstration |

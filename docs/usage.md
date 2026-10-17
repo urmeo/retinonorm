@@ -64,8 +64,8 @@ print(
 | Group labels | One finite numeric label per frame; at least two groups |
 | Center and sigma | Pixels; origin at the grid center, x rightward, y upward |
 
-`PRFFitter.fit_unit` fits one response column; `fit_all` fits each column.
-`CrossValidator.validate_unit` and `validate_all` use the same response shapes.
+`PRFFitter.fit_unit` and `CrossValidator.validate_unit` take one response column.
+`fit_all` and `validate_all` take `(frames, units)` arrays.
 Fit parameters are `x0`, `y0`, and `sigma` for geometry, `beta` for amplitude,
 and `baseline` for the offset.
 

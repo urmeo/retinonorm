@@ -10,7 +10,9 @@
   --surface: #fff;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -145,8 +147,7 @@ main.container {
 
 .content p,
 .content ul,
-.content ol,
-.content blockquote {
+.content ol {
   max-width: 76ch;
 }
 
@@ -161,13 +162,6 @@ main.container {
 
 .content li + li {
   margin-top: 0.4rem;
-}
-
-.content blockquote {
-  margin: 1.5rem 0;
-  padding: 0.1rem 1.1rem;
-  color: var(--muted);
-  border-left: 3px solid var(--line);
 }
 
 .page-toc {

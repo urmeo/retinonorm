@@ -1,8 +1,7 @@
 # Videos
 
-Two 10-second, silent videos use the response-curve example's configuration and
-known field. They add no independent evaluation result. README GIF previews open
-the videos with playback controls.
+Two silent, 10-second videos use the response-curve example's configuration and
+known field. They add no independent evaluation result.
 
 ## Apertures and responses
 
@@ -15,8 +14,8 @@ the videos with playback controls.
 
 Upper panels show masks with the known Gaussian's center and one-sigma outline;
 lower panels show the clean response curve and value at each retained frame.
-All designs use a 64 × 64 pixel grid, center `(12, 8)` pixels, and sigma `5` pixels. The response is
-`3 × aperture–field overlap + 0.5`, with no added noise.
+All designs use a 64 × 64 pixel grid, center `(12, 8)` pixels, and sigma `5`
+pixels. The response is `3 × aperture–field overlap + 0.5`, with no added noise.
 
 | Design | Retained frames | Validation groups |
 |---|---:|---:|
@@ -61,8 +60,6 @@ python scripts/generate_media.py
 
 The script reads `configs/validation.json`, computes the masks and predictions
 with the project code, and writes MP4, GIF, and PNG files to `docs/media/`.
-FFmpeg is only needed to regenerate the media. Fitting and viewing the videos
-do not require it. Encoded file bytes can differ across FFmpeg and Matplotlib
-versions even when the underlying masks and predictions match.
-
-Both clips have visible labels and manual playback controls, without autoplay.
+FFmpeg is only needed to regenerate the media. Encoded file bytes can differ
+across FFmpeg and Matplotlib versions even when the underlying masks and
+predictions match.

@@ -17,12 +17,6 @@
   overflow-wrap: anywhere;
 }
 
-.pipeline-view *,
-.pipeline-view *::before,
-.pipeline-view *::after {
-  box-sizing: border-box;
-}
-
 .pipeline-view p,
 .pipeline-view h2,
 .pipeline-view h3,
@@ -160,9 +154,6 @@
   }
 
   .pipeline-view .pipeline-diagram img {
-    display: block;
-    width: 100%;
-    height: auto;
     margin: 0;
     border: 0;
     border-radius: 0;
