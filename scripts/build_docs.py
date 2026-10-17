@@ -69,6 +69,24 @@ class SiteContent(Treeprocessor):
         destination = PAGES[target][0] if target in PAGES else target
         return urlunsplit(("", "", relative_url(destination, self.page), url.query, url.fragment))
 
+    def rewrite_element(
+        self, element: ET.Element, base: Path | None = None, *, eager: bool = False
+    ) -> None:
+        base = ROOT / self.source.parent if base is None else base
+        if element.tag == "img":
+            url = urlsplit(element.attrib["src"])
+            if not url.scheme and not url.netloc and url.path:
+                image = (base / unquote(url.path)).resolve()
+                image.relative_to(ROOT)
+                width, height = image_dimensions(image)
+                element.set("width", str(width))
+                element.set("height", str(height))
+            element.set("loading", "eager" if eager else "lazy")
+            element.set("decoding", "async")
+        for attribute in ("href", "src", "poster"):
+            if attribute in element.attrib:
+                element.set(attribute, self.rewrite_url(element.attrib[attribute], base))
+
     def add_gallery(self, root: ET.Element) -> None:
         gallery = ET.SubElement(root, "section", {"class": "figure-gallery"})
         ET.SubElement(gallery, "h2", {"id": "plots"}).text = "Plots"
@@ -99,18 +117,7 @@ class SiteContent(Treeprocessor):
                 continue
             pipeline = ET.parse(ROOT / "docs/templates/pipeline.html").getroot()
             for asset in pipeline.iter():
-                for attribute in ("href", "src", "poster"):
-                    if attribute in asset.attrib:
-                        value = asset.attrib[attribute]
-                        asset.set(attribute, self.rewrite_url(value, ROOT))
-                        if asset.tag == "img" and attribute == "src":
-                            url = urlsplit(value)
-                            if not url.scheme and not url.netloc:
-                                width, height = image_dimensions(ROOT / unquote(url.path))
-                                asset.set("width", str(width))
-                                asset.set("height", str(height))
-                            asset.set("loading", "eager")
-                            asset.set("decoding", "async")
+                self.rewrite_element(asset, ROOT, eager=True)
             root.remove(paragraph)
             root.insert(index, pipeline)
             return
@@ -120,20 +127,9 @@ class SiteContent(Treeprocessor):
             self.add_gallery(root)
         first_image = True
         for element in root.iter():
+            self.rewrite_element(element, eager=first_image)
             if element.tag == "img":
-                url = urlsplit(element.attrib["src"])
-                if not url.scheme and not url.netloc and url.path:
-                    image = (ROOT / self.source.parent / unquote(url.path)).resolve()
-                    image.relative_to(ROOT)
-                    width, height = image_dimensions(image)
-                    element.set("width", str(width))
-                    element.set("height", str(height))
-                element.set("loading", "eager" if first_image else "lazy")
-                element.set("decoding", "async")
                 first_image = False
-            for attribute in ("href", "src", "poster"):
-                if attribute in element.attrib:
-                    element.set(attribute, self.rewrite_url(element.attrib[attribute]))
             if element.tag == "pre":
                 element.set("tabindex", "0")
         for parent in list(root.iter()):
@@ -221,13 +217,14 @@ class PageLinks(HTMLParser):
 
     def handle_starttag(self, _tag: str, attrs: list[tuple[str, str | None]]) -> None:
         for name, value in attrs:
-            if value is not None:
-                if name in ("href", "src", "poster"):
-                    self.links.append(value)
-                elif name == "id":
-                    if value in self.ids:
-                        self.duplicate_ids.add(value)
-                    self.ids.add(value)
+            if value is None:
+                continue
+            if name in ("href", "src", "poster"):
+                self.links.append(value)
+            elif name == "id":
+                if value in self.ids:
+                    self.duplicate_ids.add(value)
+                self.ids.add(value)
 
 
 def validate_links(output: Path) -> None:

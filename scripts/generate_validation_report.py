@@ -15,7 +15,6 @@ import json
 import math
 import platform
 import re
-import sys
 import time
 from datetime import date
 from pathlib import Path
@@ -434,8 +433,7 @@ def run_check(report: dict[str, Any], previous: dict[str, Any], document: str) -
         print("\nrerun without --check to record the new numbers")
         return 1
 
-    blocks = render(previous)
-    if splice(document, blocks) != document:
+    if splice(document, render(previous)) != document:
         print("docs/validation.md tables do not match the committed report; rerun without --check")
         return 1
     print(
@@ -521,8 +519,7 @@ def main(argv: list[str] | None = None) -> int:
                 "runtime_config_digest", previous["config_digest"]
             )
 
-    blocks = render(report)
-    spliced = splice(document, blocks)
+    spliced = splice(document, render(report))
 
     RESULTS.mkdir(exist_ok=True)
     previous_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -543,4 +540,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

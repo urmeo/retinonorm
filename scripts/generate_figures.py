@@ -99,8 +99,8 @@ def pixel_coordinates(grid: Grid, x0: float, y0: float) -> tuple[float, float]:
     return x0 + origin, origin - y0
 
 
-def synthetic_fit_example():
-    """One reproducible noisy response for the prediction figure."""
+def figure_fitted_response() -> None:
+    """Distinguish a full-data fit from predictions made by separate training folds."""
     grid = Grid(CONFIG.stimulus.resolution)
     sequence = build_apertures(CONFIG.stimulus, "bar")
     apertures = sequence.as_float()
@@ -109,12 +109,6 @@ def synthetic_fit_example():
         grid, apertures, UNCERTAINTY_TRUTH, noise=EXAMPLE_NOISE, seed=RECOVERY_SEED
     )
     fit = PRFFitter(grid, apertures, CONFIG.fit).fit_unit(response)
-    return grid, sequence, apertures, clean, response, fit
-
-
-def figure_fitted_response() -> None:
-    """Distinguish a full-data fit from predictions made by separate training folds."""
-    grid, sequence, apertures, clean, response, fit = synthetic_fit_example()
     groups = np.unique(sequence.group)
     field = GaussianReceptiveField(fit.x0, fit.y0, fit.sigma)
     full_prediction = fit.beta * predict(field.weights(grid), apertures) + fit.baseline
@@ -931,4 +925,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

@@ -212,6 +212,7 @@ def _standard_errors(
     Copying masks and responses scales cost and ``J^T J`` equally, preserving covariance.
     This does not apply to repeated masks with independent response noise.
     """
+    undefined: tuple[float, float, float] = (float("nan"),) * 3
     if (
         jacobian.ndim != 2
         or jacobian.shape[1] != len(FITTED_PARAMETERS)
@@ -222,26 +223,26 @@ def _standard_errors(
         or isinstance(n_independent, bool)
         or n_independent > len(jacobian)
     ):
-        return (float("nan"),) * 3
+        return undefined
     dof = n_independent - N_PARAMETERS
     if dof <= 0:
-        return (float("nan"),) * 3
+        return undefined
     try:
         if np.linalg.matrix_rank(jacobian) < len(FITTED_PARAMETERS):
-            return (float("nan"),) * 3
+            return undefined
         information = jacobian.T @ jacobian
         if not np.isfinite(information).all():
-            return (float("nan"),) * 3
+            return undefined
         singular_values = np.linalg.svd(information, compute_uv=False)
         if singular_values[-1] <= 1e-15 * singular_values[0]:
-            return (float("nan"),) * 3
+            return undefined
         residual_variance = 2.0 * cost / dof
         covariance = residual_variance * np.linalg.pinv(information)
     except np.linalg.LinAlgError:
-        return (float("nan"),) * 3
+        return undefined
     variances = np.diag(covariance)
     if not np.all(np.isfinite(variances)) or np.any(variances < 0.0):
-        return (float("nan"),) * 3
+        return undefined
     errors = np.sqrt(variances)
     return float(errors[0]), float(errors[1]), float(errors[2])
 
@@ -273,7 +274,7 @@ class PRFFitter:
         self.config = config
         self._check_sigma_ceiling()
         self.n_independent_frames = _count_distinct_frames(self.apertures)
-        self._candidates = tuple(self._build_candidates())
+        self._candidates = self._build_candidates()
         self._predictions = design_matrix(self.candidates, grid, self._fit_apertures)
 
     def _check_sigma_ceiling(self) -> None:
@@ -315,7 +316,7 @@ class PRFFitter:
         sigma_low, sigma_high = self.config.sigma_bounds
         return (-radius, -radius, sigma_low), (radius, radius, sigma_high)
 
-    def _build_candidates(self) -> list[GaussianReceptiveField]:
+    def _build_candidates(self) -> tuple[GaussianReceptiveField, ...]:
         radius = self.grid.radius
         sigma_low, sigma_high = self.config.sigma_bounds
         n_sigma = max(3, self.config.grid_size // 2)
@@ -323,13 +324,13 @@ class PRFFitter:
         centres = np.linspace(-radius, radius, self.config.grid_size)
         sigmas = np.geomspace(sigma_low, sigma_high, n_sigma)
 
-        return [
+        return tuple(
             GaussianReceptiveField(float(x), float(y), float(sigma))
             for x in centres
             for y in centres
             if np.hypot(x, y) <= radius
             for sigma in sigmas
-        ]
+        )
 
     def _bounds_hit(self, x0: float, y0: float, sigma: float) -> tuple[bool, bool, bool]:
         """Flag each fitted parameter within the tolerance of either search bound."""
