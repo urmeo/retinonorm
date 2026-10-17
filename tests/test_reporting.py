@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 @pytest.fixture
 def report_script():
-    return load_script("generate_validation_report.py")
+    return load_script("scripts/generate_validation_report.py")
 
 
 @pytest.fixture
@@ -67,7 +67,7 @@ def test_report_loads_actual_json_configuration(monkeypatch):
         return changed
 
     monkeypatch.setattr(RunConfig, "load", staticmethod(load))
-    script = load_script("generate_validation_report.py")
+    script = load_script("scripts/generate_validation_report.py")
     assert loaded_paths == [ROOT / "configs" / "validation.json"]
     assert script.CONFIG.seed == 123
     assert script.CONFIG.digest() == changed.digest()
@@ -240,7 +240,7 @@ def test_runtime_refresh_records_its_own_environment(report_script, record, monk
 @pytest.fixture
 def figures_script():
     pytest.importorskip("matplotlib")
-    return load_script("generate_figures.py")
+    return load_script("scripts/generate_figures.py")
 
 
 @pytest.mark.parametrize("contents", [None, "{", '{"config_digest": "stale"}'])

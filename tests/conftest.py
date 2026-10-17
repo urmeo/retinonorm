@@ -19,8 +19,8 @@ from cortexprobe.stimuli import ApertureSequence, build_apertures
 RESOLUTION = 64
 
 
-def load_script(filename: str) -> ModuleType:
-    path = Path(__file__).resolve().parent.parent / "scripts" / filename
+def load_script(relative_path: str) -> ModuleType:
+    path = Path(__file__).resolve().parent.parent / relative_path
     spec = importlib.util.spec_from_file_location(f"_test_{path.stem}", path)
     assert spec is not None
     assert spec.loader is not None

@@ -11,7 +11,7 @@ from .conftest import load_script
 
 @pytest.fixture(scope="module")
 def docs_script():
-    return load_script("build_docs.py")
+    return load_script("scripts/build_docs.py")
 
 
 @pytest.fixture

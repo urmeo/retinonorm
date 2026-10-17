@@ -112,11 +112,9 @@ def test_failed_fit_reports_undefined_interval() -> None:
     assert np.isnan(high)
 
 
-def test_invalid_confidence_level_raises(fitter, grid, apertures) -> None:
-    fit = fitter.fit_unit(synthesise(grid, apertures, TRUTH))
-
+def test_invalid_confidence_level_raises() -> None:
     with pytest.raises(ValueError, match="level"):
-        fit.confidence_interval("x0", level=1.5)
+        UnitFit.failed().confidence_interval("x0", level=1.5)
 
 
 @pytest.mark.parametrize("signed_zeros", [False, True])

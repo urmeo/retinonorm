@@ -93,6 +93,18 @@ def test_model_config_rejects_invalid_values(overrides, message) -> None:
         ModelConfig(**overrides)
 
 
+@pytest.mark.parametrize("layers", ["conv", {"conv1": 1, "conv2": 2}])
+def test_serialized_layer_container_rejects_nonsequences(layers) -> None:
+    with pytest.raises(ConfigError, match="invalid container"):
+        ModelConfig.from_dict({"layers": layers})
+
+
+@pytest.mark.parametrize("layers", [["conv1", "conv2"], ("conv1", "conv2")])
+def test_serialized_layer_sequences_keep_complete_names(layers) -> None:
+    restored = ModelConfig.from_dict({"layers": layers})
+    assert restored.layers == ("conv1", "conv2")
+
+
 def test_sigma_floor_under_a_pixel_is_rejected_with_a_reason() -> None:
     with pytest.raises(ConfigError, match="at least 1 pixel"):
         FitConfig(sigma_bounds=(0.2, 10.0))

@@ -12,7 +12,7 @@ from .conftest import load_script
 
 @pytest.fixture
 def media_script(monkeypatch):
-    script = load_script("generate_media.py")
+    script = load_script("scripts/generate_media.py")
     for name, value in (("WIDTH", 4), ("HEIGHT", 4), ("DPI", 10), ("FRAME_COUNT", 2)):
         monkeypatch.setattr(script, name, value)
     return script

@@ -487,11 +487,9 @@ def test_non_finite_apertures_are_refused(grid) -> None:
         PRFFitter(grid, apertures, FitConfig(grid_size=5, sigma_bounds=(1.0, 10.0)))
 
 
-def test_confidence_interval_rejects_an_unknown_parameter(fitter, grid, apertures) -> None:
-    fit = fitter.fit_unit(synthesise(grid, apertures, (12.0, 8.0, 5.0)))
-
+def test_confidence_interval_rejects_an_unknown_parameter() -> None:
     with pytest.raises(ValueError, match="parameter must be one of"):
-        fit.confidence_interval("beta")
+        UnitFit.failed().confidence_interval("beta")
 
 
 @pytest.mark.parametrize("parameter", ["x0", "y0", "sigma"])
